@@ -60,17 +60,17 @@ def view():
         STATE['board']=switchboard.initial();save()
     if STATE['training'] and STATE['training']['status']=='running' and time.time()-STATE['training']['started']>=16:
         STATE['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**STATE,'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**STATE,'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(STATE['sources']['dataset']),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=STATE['noc']
     if (noc.get('operation') or {}).get('status')=='running':raise ValueError('The caretaker is already working. Wait for the current operation.')
     snapshot=copy.deepcopy(noc);source=STATE['sources']['dataset'];session=STATE['created_at']
-    if action in ('test','train','deploy','backup','prompt-profile'):
+    if action in ('test','verify','train','deploy','backup','prompt-profile'):
         snapshot['previous_report']=snapshot.get('report');snapshot['report']=None;snapshot.pop('final',None)
-    if action=='final':snapshot.pop('final',None)
-    noc['operation']={'action':action,'status':'running','message':'Contacting Token Factory…','started':time.time()};noc['revision']+=1
-    if action in ('test','train','deploy','backup','prompt-profile','final'):
+    if action in ('final','verify'):snapshot.pop('final',None)
+    noc['operation']={'action':action,'status':'running','message':'Checking the caretaker…','started':time.time()};noc['revision']+=1
+    if action in ('test','verify','train','deploy','backup','prompt-profile','final'):
         STATE['rooms'][1]=False;STATE['rooms'][2]=False;STATE['escaped']=False
     def progress(message):
         with LOCK:
@@ -87,7 +87,7 @@ def launch_noc(action,body):
                 return
             snapshot['operation']={'action':action,'status':status,'message':message,'finished':time.time()}
             snapshot['revision']=STATE['noc']['revision']+1;STATE['noc']=snapshot
-            if action=='final':STATE['rooms'][1]=bool(status=='succeeded' and snapshot.get('final',{}).get('passed'))
+            if action in ('final','verify'):STATE['rooms'][1]=bool(status=='succeeded' and snapshot.get('final',{}).get('passed'))
             save()
     threading.Thread(target=worker,daemon=True).start()
 
@@ -160,9 +160,9 @@ class Handler(BaseHTTPRequestHandler):
             room=str(b['room']); n=STATE['hints'][room];STATE['hints'][room]=min(n+1,3)
             return {'hint':content.HINTS[room][min(n,2)]}
         elif path=='/api/mabel-post':
-            source=clue_post.retrieve(bool(b.get('archived')),STATE['mode'])
+            source=clue_post.saved_post() if b.get('bookmark') and not clue_post.public_url() else clue_post.retrieve(bool(b.get('archived')),STATE['mode'])
             STATE['topic_evidence']=source;refresh_switchboard()
-            event('Mabel’s topic recovered from '+('a marked rehearsal draft.' if source['kind']=='rehearsal' else 'a live Tavily extraction.'))
+            event('Mabel’s topic recovered from '+('her saved bookmark.' if source['kind']=='saved-post' else 'a marked rehearsal draft.' if source['kind']=='rehearsal' else 'a live Tavily extraction.'))
             return {'source':source}
         elif path=='/api/search':
             if b.get('archived'):
@@ -225,6 +225,10 @@ class Handler(BaseHTTPRequestHandler):
             if action=='playtest':
                 STATE['noc']['playtest']=True;STATE['noc']['revision']+=1
                 STATE['started']=time.time();STATE['paused']=False;STATE['pause_at']=None;STATE['pause_total']=0;STATE.pop('finished',None)
+            elif action=='memory':
+                if (STATE['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the caretaker to finish its current task.')
+                source=content.repair_memory(STATE['sources']['dataset'],b.get('memory'),b.get('choice'))
+                return self.action('/api/dataset',{'source':source})
             elif action=='settings':
                 if (STATE['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the current operation before changing settings.')
                 if STATE['noc'].get('runner') and STATE['noc'].get('route')!='prompt' and b.get('base_model',STATE['noc']['runner']['model'])!=STATE['noc']['runner']['model']:raise ValueError('This local backup uses '+STATE['noc']['runner']['model']+'. Load a different checkpoint to change its base model.')
@@ -236,7 +240,7 @@ class Handler(BaseHTTPRequestHandler):
                 equipment=str(b.get('equipment','')).strip().lower();fault=str(b.get('fault','')).strip().lower()
                 request=caretaker.camera_request(equipment,fault)
                 observation.update(equipment=equipment,fault=fault,request=request,reviewed=True);STATE['noc']['revision']+=1
-            elif action in ('connect','vision','probe','test','train','refresh','deploy','backup','prompt-profile','final'):
+            elif action in ('connect','inspect','vision','review-probe','probe','test','verify','train','refresh','deploy','backup','prompt-profile','final'):
                 if not STATE['rooms'][0] and not STATE['noc'].get('playtest') and action not in ('connect','refresh'):raise ValueError('Restore Room 1 before running the caretaker. You can explore this room first.')
                 launch_noc(action,b)
             else:raise ValueError('Unknown caretaker action.')

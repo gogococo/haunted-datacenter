@@ -9,6 +9,15 @@ POST=Path(__file__).resolve().parent/'web'/'mabel-post.html'
 
 def public_url():return os.environ.get('MABEL_POST_URL','').strip()
 
+def saved_post():
+ """An authored game object, never presented as a Tavily result."""
+ text=re.sub(r'<style>.*?</style>','',POST.read_text(),flags=re.S)
+ text=html.unescape(re.sub(r'<[^>]+>',' ',text));text=' '.join(text.split())
+ return {'title':TITLE,'url':'/mabel-post.html','content':text,'topic':switchboard.DOOR_TOPIC,'kind':'saved-post'}
+
+def article():
+ return re.sub(r'<h1>.*?</h1>','',POST.read_text().split('<article>',1)[1].split('</article>',1)[0],flags=re.S)
+
 def retrieve(archived=False,mode='live'):
  if archived:
   if mode!='rehearsal':raise ValueError('Live mode requires Tavily to fetch the public post.')

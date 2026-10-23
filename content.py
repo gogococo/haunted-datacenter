@@ -35,6 +35,36 @@ def starter_records():
  rows[8]['messages'][2]['content']='Sure! Release the door latch.'
  return '\n'.join(json.dumps(x) for x in rows)
 
+MEMORIES=[
+ {'id':'fans','row':1,'part':'action','choices':['restart_fans','stop_pump','release_latch']},
+ {'id':'pump','row':4,'part':'equipment','choices':['gpu_rack','cooling_loop','exit_door']},
+ {'id':'door','row':8,'part':'format','choices':['command','chat','partial']},
+]
+
+def repair_memory(source,identifier,choice):
+ memory=next((m for m in MEMORIES if m['id']==identifier),None)
+ if not memory or choice not in memory['choices']:raise ValueError('Choose one of the replacement pieces on this memory card.')
+ rows=[json.loads(line) for line in source.splitlines() if line.strip()]
+ if len(rows)!=9:raise ValueError('Keep Alex’s nine saved training examples.')
+ row=rows[memory['row']]
+ if memory['part']=='format':
+  row['messages'][2]['content']={'command':'{"action":"release_latch","equipment":"exit_door"}','chat':'Sure! Release the door latch.','partial':'{"action":"release_latch"}'}[choice]
+ else:
+  try:answer=json.loads(row['messages'][2]['content'])
+  except (ValueError,TypeError):answer={}
+  answer[memory['part']]=choice;row['messages'][2]['content']=json.dumps(answer,separators=(',',':'))
+ return '\n'.join(json.dumps(r) for r in rows)
+
+def memory_status(source):
+ try:
+  rows=[json.loads(line) for line in source.splitlines() if line.strip()];expected=clean_records();result={}
+  for memory in MEMORIES:
+   i=memory['row']
+   try:result[memory['id']]=json.loads(rows[i]['messages'][2]['content'])==json.loads(expected[i]['messages'][2]['content']) and rows[i]['messages'][:2]==expected[i]['messages'][:2]
+   except (ValueError,KeyError,IndexError,TypeError):result[memory['id']]=False
+  return result
+ except (ValueError,KeyError,TypeError):return {m['id']:False for m in MEMORIES}
+
 def validate_seed(source):
  errors=[];rows=[];lines=[l for l in source.splitlines() if l.strip()]
  if len(lines)!=9:errors.append('Keep the nine original training records; repair their assistant answers.')
@@ -129,7 +159,7 @@ RUNBOOK_SOLUTION='''def authorize(command):
 ARCHIVE=[{'title':'MDN: Retry-After header','url':'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After','content':'Paraphrased rehearsal evidence: Retry-After accepts either delay-seconds or an HTTP-date. An absolute date must be compared with the current clock.'},{'title':'RFC 9110, section 10.2.3','url':'https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3','content':'Paraphrased rehearsal evidence: delay-seconds is a nonnegative decimal integer. An HTTP-date supplies an absolute retry time. The local controller contract uses 60 seconds for malformed input.'}]
 HINTS={
  '1':['Read both forms of the header. The old runbook only covers one.','An HTTP-date is an absolute time. Compare it with the supplied now value, not your wall clock.','Use parsedate_to_datetime. Clamp past dates to zero; malformed inputs fall back to 60. Negative numbers are not valid delay-seconds.'],
- '2':['The ledger is the source of truth. Compare every assistant label with it.','Three records are damaged: one wrong action, one missing equipment field, and one prose answer.','Repair records 2, 5, and 9. Each answer needs the matching action and equipment from the maintenance checklist.'],
+ '2':['Start with a camera fault and the Mac mini’s first check. Then inspect Alex’s three damaged training memories.','The fan lesson names the wrong repair. The pump lesson has no equipment destination. The door lesson speaks prose to a controller.','Restart the fans, send the pump command to the cooling loop, and give the door a command containing both action and equipment.'],
  '3':['Connect SUPPLY through the GPU heat exchanger and then into RETURN. Click placed pipes to rotate them.','The parts tray has four elbows and two straights. Route around the blocked cells; the GPU connection runs vertically.','Balanced fans cool the rack below 75°C within the 12 kW budget. Circulate coolant through a sealed loop and keep the alarms enabled.']}
 
 def bootstrap():

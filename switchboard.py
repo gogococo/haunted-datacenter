@@ -60,11 +60,11 @@ def terminal_command(state,command):
           'mosquitto_pub -h <host> -t <topic> -m OPEN\n'
           '                             Publish with the Mosquitto MQTT client\n\n'
           '-h = broker host (Pip found its name/address)\n'
-          '-t = topic (fetch Mabel’s launch post with Tavily)\n'
+          '-t = topic (read Mabel’s bookmarked post)\n'
           '-m = message (the door expects OPEN)\n\n'
-          'Real Mosquitto syntax; broker traffic is simulated. No system shell is connected.')
+          'Send OPEN to the door topic. Mabel accepts no substitutions.')
  if args==['mosquitto_pub','--help']:
-  return 'Mosquitto MQTT publisher (simulated broker)\nUsage: mosquitto_pub -h HOST -t TOPIC -m MESSAGE\n-h / --host: broker hostname\n-t / --topic: exact topic name, without + or # wildcards\n-m / --message: message payload\nAsk Pip for the host; fetch Mabel’s launch post for the topic.'
+  return 'Mosquitto MQTT publisher\nUsage: mosquitto_pub -h HOST -t TOPIC -m MESSAGE\n-h / --host: broker hostname\n-t / --topic: exact topic name, without + or # wildcards\n-m / --message: message payload\nAsk Pip for the host; fetch Mabel’s launch post for the topic.'
  if args==['status']:
   return '\n'.join(f'{label}: {"OK" if value else "WAITING"}' for label,value in [
    ('Ghost services',state.get('board',{}).get('ready')),('Protocol research',state.get('board_citation')),
@@ -83,7 +83,7 @@ def terminal_command(state,command):
    flags[names[flag]]=value
   if not state.get('switchboard_applied'):return 'BROKER OFFLINE: run ghostctl apply after fixing and testing the wiring.'
   if flags['host'] not in (BROKER_HOST,BROKER_IP):return 'No broker found at that host. Pip’s successful DNS lookup has the broker name and address.'
-  if not state.get('topic_evidence'):return 'TOPIC UNVERIFIED: fetch Mabel’s launch post with Tavily on the old computer first.'
+  if not state.get('topic_evidence'):return 'TOPIC UNVERIFIED: read Mabel’s bookmarked post on the old computer first.'
   if any(c in flags['topic'] for c in '+#'):return 'Publish to an exact topic name. + and # are subscription filters, not publish topics.'
   if flags['topic']!=DOOR_TOPIC:return 'Message sent, but no door is listening on that topic. Check the door-update entry in Mabel’s post.'
   if flags['message']!='OPEN':return 'Door received the message, but expects OPEN (capital letters).'

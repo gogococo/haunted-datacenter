@@ -8,6 +8,15 @@ import content,server,tokenfactory,switchboard,clue_post
 CORRECT={'pip':'DNS','edgar':'SMTP','mabel':'MQTT'}
 
 class ContentTests(unittest.TestCase):
+ def test_three_memory_repairs_reproduce_the_trained_recipe(self):
+  source=content.starter_records()
+  for key,value in [('fans','restart_fans'),('pump','cooling_loop'),('door','command')]:source=content.repair_memory(source,key,value)
+  self.assertFalse(content.validate_seed(source)[1]);self.assertTrue(all(content.memory_status(source).values()))
+  self.assertEqual(content.recipe_hash(source),content.recipe_hash('\n'.join(json.dumps(r) for r in content.clean_records())))
+ def test_wrong_memory_piece_does_not_count_as_repaired(self):
+  source=content.repair_memory(content.starter_records(),'fans','stop_pump')
+  self.assertFalse(content.memory_status(source)['fans'])
+  with self.assertRaises(ValueError):content.repair_memory(source,'fans','unlisted-command')
  def test_three_damaged_labels(self):
   rows,errors=content.validate_seed(content.starter_records());self.assertEqual(len(errors),3);self.assertEqual(len(rows),6)
  def test_clean_disjoint_splits(self):
@@ -137,6 +146,17 @@ class FlowTests(unittest.TestCase):
  def test_live_cannot_load_local_post_fixture(self):
   self.post('host',{'action':'live'})
   with self.assertRaises(urllib.error.HTTPError):self.post('mabel-post',{'archived':True})
+ def test_saved_bookmark_is_a_game_object_and_does_not_replace_web_research(self):
+  self.post('host',{'action':'live'})
+  with patch.object(clue_post,'public_url',return_value=''),patch.object(server.subprocess,'run') as run:
+   r=self.post('mabel-post',{'bookmark':True});run.assert_not_called()
+  self.assertEqual(r['state']['topic_evidence']['kind'],'saved-post');self.assertNotIn('board_citation',r['state'])
+  self.post('switchboard/test',{'routes':CORRECT})
+  self.assertIn('BLOCKED',self.post('terminal',{'command':'ghostctl apply'})['output'])
+ def test_memory_cards_edit_actual_examples_but_cannot_unlock_the_caretaker(self):
+  for key,value in [('fans','restart_fans'),('pump','cooling_loop'),('door','command')]:self.post('noc/memory',{'memory':key,'choice':value})
+  self.assertTrue(server.STATE['noc']['dataset_report']['passed']);self.assertFalse(server.STATE['rooms'][1])
+  self.assertFalse(content.validate_seed(server.STATE['sources']['dataset'])[1])
  def test_changed_wiring_invalidates_applied_fix(self):
   self.restore();self.post('switchboard/test',{'routes':{'pip':'SMTP','edgar':'MQTT','mabel':'DNS'}})
   self.post('switchboard/test',{'routes':CORRECT})

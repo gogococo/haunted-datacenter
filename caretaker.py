@@ -227,12 +227,26 @@ def final_assessment(n,progress=lambda x:None):
 
 def run(action,n,body,source,runtime,progress):
  if action=='connect':return connect(n)
+ if action=='inspect':
+  if not n.get('connection'):connect(n)
+  return vision(n,body.get('camera'))
+ if action=='review-probe':
+  camera=body.get('camera');o=n['observations'].get(camera)
+  if not o:raise ValueError('Scan this camera first.')
+  o['request']=camera_request(o['equipment'],o['fault']);o['reviewed']=True
+  expected=next(c['expected'] for c in CAMERAS if c['id']==camera)
+  reply=text_call(n,o['request']);n['probe']={'camera':camera,'request':o['request'],**reply,'checks':checks(reply,expected)}
+  return 'Caretaker replied. Compare its repair with the camera fault.'
  if action=='vision':return vision(n,body.get('camera'))
  if action=='probe':
   camera=body.get('camera','west');o=n['observations'].get(camera)
   if not o or not o['reviewed']:raise ValueError('Inspect a camera and check its transcription first.')
   n['probe']={'camera':camera,'request':o['request'],**text_call(n,o['request'])};return 'The caretaker replied. Read its answer on the monitor.'
  if action=='test':return assess(n,progress)
+ if action=='verify':
+  assess(n,progress)
+  if not n['report']['passed']:return 'The caretaker needs another adjustment. Check the Mac mini results.'
+  return final_assessment(n,progress)
  if action=='train':return train(n,source,runtime)
  if action=='backup':return activate_backup(n,source)
  if action=='prompt-profile':return activate_prompt_route(n,source)

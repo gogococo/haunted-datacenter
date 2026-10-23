@@ -8,6 +8,20 @@ def response(output='{"action":"restart_fans","equipment":"gpu_rack"}',finish='s
  return {'output':output,'finish_reason':finish,'model':'test','request_id':'test','usage':{}}
 
 class AssessmentTests(unittest.TestCase):
+ def test_first_camera_scan_connects_and_then_inspects(self):
+  n=c.initial()
+  with patch.object(c,'connect') as connect,patch.object(c,'vision') as vision:c.run('inspect',n,{'camera':'west'},'',Path('.'),lambda _:None)
+  connect.assert_called_once_with(n);vision.assert_called_once_with(n,'west')
+ def test_confirmation_uses_observed_fields_for_the_actual_probe(self):
+  n=c.initial();n['observations']['west']={'equipment':'cooling_loop','fault':'coolant_leak','reviewed':False}
+  with patch.object(c,'text_call',return_value=response()) as call:c.run('review-probe',n,{'camera':'west'},'',Path('.'),lambda _:None)
+  self.assertEqual(call.call_args.args[1],'Equipment: Cooling loop. Observation: Coolant leaking.')
+  self.assertTrue(n['observations']['west']['reviewed']);self.assertIn('checks',n['probe'])
+ def test_combined_verification_does_not_run_final_on_a_failed_behavior_check(self):
+  n=c.initial()
+  def assess(n,progress):n['report']={'passed':False}
+  with patch.object(c,'assess',side_effect=assess),patch.object(c,'final_assessment') as final:c.run('verify',n,{},'',Path('.'),lambda _:None)
+  final.assert_not_called()
  def test_cutoff_does_not_pass_even_when_json_is_valid(self):
   r=c.checks(response(finish='length'),{'action':'restart_fans','equipment':'gpu_rack'})
   self.assertTrue(r['correct']);self.assertFalse(r['complete'])

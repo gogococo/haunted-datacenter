@@ -11,7 +11,7 @@ python3 server.py
 
 Open http://127.0.0.1:8765 and click **Play**. Keep credentials in the server environment. The game binds to loopback and saves progress in `.runtime/`. Resetting the game does not delete cloud resources. This is a trusted local, single-team POC.
 
-Room 1 uses the authenticated Tavily CLI. Rehearsal mode permits marked sample clues; Room 2 still uses actual model inference. The gear menu starts a fresh incident. Room previews are available at `/#2` and `/#3`; Room 2 has an isolated playtest button if Room 1 is incomplete.
+Room 1 uses the authenticated Tavily CLI. Rehearsal mode permits marked sample clues; Room 2 still uses actual model inference. The gear menu starts a fresh incident. Room previews are available at `/#2` and `/#3`; Room 2 has an isolated playtest button if Room 1 is incomplete. Its normal door opens after a combined behavior and camera-interlock check. The NOC goal and next-object clue remain visible while exploring.
 
 ## Room 1 — The Haunted Switchboard
 
@@ -24,14 +24,14 @@ mosquitto_pub -h crypt.local -t TOPIC -m OPEN
 
 `ghostctl` is fictional. The broker, DNS and message delivery are mocked. Correct wiring and an MQTT documentation reference are required. Mabel forgot her topic: retrieve her launch post before publishing. Guessing the topic does not bypass that clue.
 
-The current playtest uses a clearly marked local draft for Mabel’s post. For live Tavily extraction, publish `web/mabel-post.html` at a public HTTPS URL, remove its local-draft notice, and set `MABEL_POST_URL` before starting the server. Live mode refuses the local draft. Public posting is not performed automatically.
+Mabel’s bookmark is an authored game object that opens inside the old computer, with a return button. It does not pretend to be a Tavily result. The separate documentation search uses real Tavily and is required to apply the wiring. To fetch a public version of the post through Tavily Extract too, publish `web/mabel-post.html` at a public HTTPS URL and set `MABEL_POST_URL` before starting the server. Public posting is not performed automatically. Legacy rehearsal fixtures remain restricted to rehearsal mode.
 
 ## Room 2 — The Night Operations Center
 
 - **Deployment rack:** connect the Token Factory account and discover the local trained backup. The main experiment restores a real previously trained checkpoint; the optional prompt comparison is a separate, labeled route.
 - **Security cameras:** send actual images to Token Factory vision. Review the equipment and fault it observed. The GPU rack has stopped fans, the cooling loop leaks, and the exit latch is stuck. These names are visible on the equipment; there is no invented dialect.
 - **Caretaker monitor:** vary temperature, output-token limit and instructions. These are inference settings. Lowering temperature does not teach missing maintenance rules, and lowering the token limit can truncate JSON.
-- **Maintenance binder:** repair three damaged records using dropdowns and a visible checklist. Preview the JSONL before and after repair. Nine seed labels expand into 72 training and 18 validation phrasings.
+- **Training memories:** three illustrated cards show a wrong repair instruction, a missing equipment destination, and an answer the controller cannot parse. Drag replacement pieces onto each memory or click them. Feedback shows what that saved lesson would do. The cards edit the real damaged records; the other six are intact. An optional JSONL preview explains the mapping to 72 training and 18 validation phrasings.
 - **Alex’s Mac mini:** record the base model’s behavior, restore the trained checkpoint, then test again. Nine real replies cover three phrasings repeated three times. Checks measure correctness, consistency, brevity, completion, and exactly `action` plus `equipment` JSON.
 
 The final assessment makes three fresh vision calls and feeds the actual observed equipment/fault pairs to the text model. An incorrect visual observation cannot pass through a lucky repair answer. Changed settings or examples invalidate the current assessment.
@@ -79,6 +79,6 @@ Recover the cooling controller with dropdowns. The local simulator measures temp
 python3 -m unittest -q test_game test_caretaker test_plant
 ```
 
-The automated suite mocks cloud calls and covers routing, inventory, no-bypass gates, current assessment/configuration, incomplete responses, backup identity, prompt-route separation, and stale asynchronous completion after reset. Browser playtests separately verify the controls. Real integration testing uses actual Tavily search, Token Factory vision, the downloaded adapter and diagnostic inference; Mabel’s unpublished post remains a marked rehearsal fixture.
+The automated suite mocks cloud calls and covers routing, inventory, no-bypass gates, current assessment/configuration, incomplete responses, backup identity, prompt-route separation, and stale asynchronous completion after reset. Browser playtests separately verify the controls. Real integration testing uses actual Tavily search, Token Factory vision, the downloaded adapter and diagnostic inference; Mabel’s saved bookmark remains an authored local game clue rather than a web extraction.
 
 Model weights, virtual environments, API keys and `.runtime/` are excluded from Git and the downloadable archive. Manage existing cloud jobs and endpoints in Token Factory; resetting this game does not cancel or remove them.
