@@ -33,3 +33,5 @@
 @media(max-width:760px){.noc-stage{width:100%}.noc-object>span{font-size:6px;padding:3px 4px;bottom:-8px}.noc-scene-caption{font-size:7px}.noc-room .room-topline h1{font-size:24px}.noc-service{font-size:8px}.noc-footer{gap:8px}.noc-training-card{grid-template-columns:1fr 1fr}.noc-training-card span{grid-column:1/-1}.noc-exit>span{font-size:5px}.noc-ledger{padding:12px;gap:8px}.noc-ledger p{font-size:12px}}
 
 .noc-checks small{display:block;color:#89727b;font-size:11px;line-height:1.6;margin:7px 0 0 25px}
+
+.noc-dataset-preview{margin-top:18px;padding:14px;border:1px solid #b8b39b}.noc-dataset-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:#252a35;color:#f1e9ce;font-size:11px}.topic-post{margin:18px 0;padding-bottom:18px;border-bottom:1px solid #b8b39b}.protocol-research{margin:18px 0}.noc-observation label{display:block;margin:10px 0}

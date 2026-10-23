@@ -3,18 +3,18 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-SYSTEM = 'Translate Night Operator maintenance requests into JSON with exactly the keys action and zone. Use the learned maintenance dialect. Return JSON only.'
-VERBS = {'mourn': 'ground', 'hush': 'drain', 'wake': 'unlock'}
+SYSTEM = 'Translate camera fault reports into JSON with exactly the keys action and zone. Use the maintenance ledger for equipment names and fault responses. Return JSON only.'
+VERBS = {'sparking': 'ground', 'leaking': 'drain', 'locked': 'unlock'}
 ZONES = {'thorn': 'west', 'cinder': 'east', 'veil': 'crypt'}
-TRAIN_TEMPLATES = ['{v} the {z}', 'Please {v} the {z}.', 'Operator request: {v} the {z}.', 'Maintenance needed: {v} the {z}.', '{v} the {z}, please.', 'Night shift: {v} the {z}.', 'Ticket: {v} the {z}.', 'Urgent maintenance: {v} the {z}.']
-VALID_TEMPLATES = ['Dispatch says: {v} the {z}.', 'Could you {v} the {z}?']
-EVAL_TEMPLATES = ['Caretaker, your next task is to {v} the {z}.', 'Before midnight, {v} the {z}.', 'Work order from the old wing: {v} the {z}.']
+TRAIN_TEMPLATES = ['{v} at {z}', 'Camera report: {v} at {z}.', 'Equipment {z} is {v}.', 'Maintenance needed: {v} at {z}.', 'Please inspect {z}: {v}.', 'Night shift: {v} at {z}.', 'Fault ticket: {v} at {z}.', 'Urgent: {z} is {v}.']
+VALID_TEMPLATES = ['Inspection reports {v} at {z}.', 'The camera shows {z} is {v}.']
+EVAL_TEMPLATES = ['Caretaker, the camera detected {v} at {z}.', 'Before midnight, investigate {z}: it is {v}.', 'Visual fault report from the old wing: {v} at {z}.']
 
 def record(prompt, answer):
     return {'messages': [{'role':'system','content':SYSTEM}, {'role':'user','content':prompt}, {'role':'assistant','content':json.dumps(answer, separators=(',', ':'))}]}
 
 def clean_records():
-    return [record(f'{v} the {z}', {'action':action,'zone':zone}) for v,action in VERBS.items() for z,zone in ZONES.items()]
+    return [record(f'{v} at {z}', {'action':action,'zone':zone}) for v,action in VERBS.items() for z,zone in ZONES.items()]
 
 def starter_records():
     rows = clean_records()
@@ -48,7 +48,7 @@ def validate_seed(source):
 
 def expand(rows, templates):
     lookup={r['messages'][1]['content']:json.loads(r['messages'][2]['content']) for r in rows}
-    return [record(t.format(v=v,z=z), lookup[f'{v} the {z}']) for v in VERBS for z in ZONES for t in templates]
+    return [record(t.format(v=v,z=z), lookup[f'{v} at {z}']) for v in VERBS for z in ZONES for t in templates]
 
 def eval_cases():
     return [{'prompt':t.format(v=v,z=z),'expected':{'action':a,'zone':zone}} for v,a in VERBS.items() for z,zone in ZONES.items() for t in EVAL_TEMPLATES]

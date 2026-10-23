@@ -32,11 +32,11 @@ class AssessmentTests(unittest.TestCase):
   for values in [{'temperature':'nan'},{'temperature':3},{'max_tokens':0},{'system':''}]:
    with self.assertRaises(ValueError):c.settings(values,c.initial()['config'])
   n=c.initial();n['config']=c.settings({'temperature':0.3,'max_tokens':64,'system':'JSON only'},n['config'])
-  with patch.object(c,'completion',return_value=response()) as call:c.text_call(n,'mourn the thorn')
+  with patch.object(c,'completion',return_value=response()) as call:c.text_call(n,'sparking at thorn')
   self.assertEqual(call.call_args.args[2:4],(0.3,64));self.assertEqual(call.call_args.args[1][0]['content'],'JSON only')
  def test_vision_sends_pixels_and_no_expected_answer(self):
   n=c.initial();n['config']['vision_model']='vision'
-  with patch.object(c,'completion',return_value=response('{"request":"mourn the thorn","observation":"Sparks"}')) as call:c.vision(n,'west')
+  with patch.object(c,'completion',return_value=response('{"equipment":"thorn","fault":"sparking","observation":"Sparks"}')) as call:c.vision(n,'west')
   messages=call.call_args.args[1];self.assertIn('data:image/png;base64,',messages[1]['content'][1]['image_url']['url']);self.assertNotIn('ground',json.dumps(messages));self.assertFalse(n['observations']['west']['reviewed'])
  def test_final_cannot_pass_without_real_training_and_endpoint(self):
   n=c.initial();n['report']={'passed':True}
@@ -50,10 +50,24 @@ class AssessmentTests(unittest.TestCase):
   n['deployment_receipt']={'job_id':'job','weights_id':'weights','endpoint_id':'ep'};n['report']={'passed':True,'endpoint_id':'ep','config':copy.deepcopy(n['config'])};return n
  def test_final_uses_fresh_vision_and_text_for_all_three_incidents(self):
   n=self.ready()
-  def vision(n,id):n['observations'][id]={'request':id,'observation':'actual vision output'}
+  def vision(n,id):
+   camera=next(x for x in c.CAMERAS if x['id']==id);n['observations'][id]={'request':id,'equipment':camera['equipment'],'fault':camera['fault'],'observation':'actual vision output'}
   def text(n,prompt):return response(json.dumps(next(x['expected'] for x in c.CAMERAS if x['id']==prompt)))
   with patch.object(c,'refresh_cloud'),patch.object(c,'vision',side_effect=vision) as v,patch.object(c,'text_call',side_effect=text) as t:c.final_assessment(n)
   self.assertEqual(v.call_count,3);self.assertEqual(t.call_count,3);self.assertTrue(n['final']['passed'])
+ def test_wrong_visual_fault_cannot_pass_with_a_lucky_correct_action(self):
+  n=self.ready()
+  def vision(n,id):
+   camera=next(x for x in c.CAMERAS if x['id']==id);n['observations'][id]={'request':id,'equipment':camera['equipment'],'fault':'unknown','observation':'No visible issue'}
+  def text(n,prompt):return response(json.dumps(next(x['expected'] for x in c.CAMERAS if x['id']==prompt)))
+  with patch.object(c,'refresh_cloud'),patch.object(c,'vision',side_effect=vision),patch.object(c,'text_call',side_effect=text):c.final_assessment(n)
+  self.assertFalse(n['final']['passed']);self.assertTrue(all(r['checks']['correct'] for r in n['final']['results']))
+ def test_observed_equipment_and_fault_determine_caretaker_input(self):
+  n=c.initial();n['config']['vision_model']='vision'
+  with patch.object(c,'completion',return_value=response('{"equipment":"cinder","fault":"sparking","observation":"Sparks at CINDER"}')):c.vision(n,'west')
+  o=n['observations']['west'];self.assertEqual(o['request'],'sparking at cinder');o['reviewed']=True
+  with patch.object(c,'text_call',return_value=response()) as call:c.run('probe',n,{'camera':'west'},'',Path('.'),lambda x:None)
+  self.assertEqual(call.call_args.args[1],'sparking at cinder')
  def test_weight_mismatch_blocks_final(self):
   n=self.ready();n['endpoint']['custom_weights_id']='other'
   with patch.object(c,'refresh_cloud'),self.assertRaisesRegex(ValueError,'does not match'):c.final_assessment(n)

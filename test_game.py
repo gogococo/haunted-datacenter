@@ -3,7 +3,7 @@ import json,tempfile,threading,unittest,urllib.request,urllib.error,itertools
 from pathlib import Path
 from unittest.mock import patch
 from http.server import ThreadingHTTPServer
-import content,server,tokenfactory,switchboard
+import content,server,tokenfactory,switchboard,clue_post
 
 CORRECT={'pip':'DNS','edgar':'SMTP','mabel':'MQTT'}
 
@@ -65,7 +65,8 @@ class FlowTests(unittest.TestCase):
  def restore(self):
   self.post('search',{'archived':True});self.post('switchboard/test',{'routes':CORRECT});self.open_terminal_door()
  def open_terminal_door(self):
-  self.post('terminal',{'command':'ghostctl apply'});return self.post('terminal',{'command':'mqtt publish midnight/door OPEN'})
+  self.post('mabel-post',{'archived':True})
+  self.post('terminal',{'command':'ghostctl apply'});return self.post('terminal',{'command':'mosquitto_pub -h crypt.local -t midnight/door -m OPEN'})
  def test_token_required(self):
   with self.assertRaises(urllib.error.HTTPError):self.post('start',token=False)
  def test_correct_routes_require_research(self):
@@ -107,22 +108,42 @@ class FlowTests(unittest.TestCase):
   self.post('switchboard/test',{'routes':CORRECT})
   self.assertIn('Tavily',self.post('terminal',{'command':'ghostctl apply'})['output'])
   self.post('search',{'archived':True})
-  self.assertIn('OFFLINE',self.post('terminal',{'command':'mqtt publish midnight/door OPEN'})['output'])
+  self.assertIn('OFFLINE',self.post('terminal',{'command':'mosquitto_pub -h crypt.local -t midnight/door -m OPEN'})['output'])
   self.assertFalse(server.STATE['rooms'][0])
  def test_terminal_wrong_topic_payload_and_shell_input_are_safe(self):
   self.post('search',{'archived':True});self.post('switchboard/test',{'routes':CORRECT});self.post('terminal',{'command':'ghostctl apply'})
   with patch.object(server.subprocess,'run') as run:
-   for command in ['mqtt publish wrong/topic OPEN','mqtt publish midnight/door closed','ghostctl apply; touch /tmp/haunted','$(whoami)','mqtt publish "']:
+   for command in ['mosquitto_pub -h crypt.local -t wrong/topic -m OPEN','mosquitto_pub -h crypt.local -t midnight/door -m closed','ghostctl apply; touch /tmp/haunted','$(whoami)','mqtt publish "']:
     r=self.post('terminal',{'command':command});self.assertFalse(r['state']['rooms'][0]);self.assertTrue(r['output'])
    run.assert_not_called()
   self.assertTrue(self.open_terminal_door()['state']['rooms'][0])
+ def test_guessed_topic_does_not_replace_tavily_retrieval(self):
+  self.post('search',{'archived':True});self.post('switchboard/test',{'routes':CORRECT});self.post('terminal',{'command':'ghostctl apply'})
+  r=self.post('terminal',{'command':'mosquitto_pub -h crypt.local -t midnight/door -m OPEN'})
+  self.assertIn('UNVERIFIED',r['output']);self.assertFalse(r['state']['rooms'][0])
+ def test_mosquitto_host_flags_and_subscription_filters(self):
+  self.post('search',{'archived':True});self.post('mabel-post',{'archived':True});self.post('switchboard/test',{'routes':CORRECT});self.post('terminal',{'command':'ghostctl apply'})
+  for command in ['mosquitto_pub -h localhost -t midnight/door -m OPEN','mosquitto_pub -h crypt.local -t midnight/+ -m OPEN','mosquitto_pub -h crypt.local -h crypt.local -m OPEN']:
+   self.assertFalse(self.post('terminal',{'command':command})['state']['rooms'][0])
+  self.assertTrue(self.post('terminal',{'command':'mosquitto_pub --message OPEN --topic midnight/door --host 10.13.0.7'})['state']['rooms'][0])
+ def test_live_post_uses_tavily_extract_and_validates_retrieved_topic(self):
+  self.post('host',{'action':'live'})
+  result={'results':[{'url':'https://example.com/mabel','raw_content':'Door latch topic: `midnight/door`'}]}
+  with patch.object(clue_post,'public_url',return_value='https://example.com/mabel'),patch.object(clue_post.subprocess,'run',return_value=type('Result',(),{'returncode':0,'stdout':json.dumps(result)})()) as run:
+   r=self.post('mabel-post');self.assertEqual(r['state']['topic_evidence']['kind'],'tavily-extract');self.assertEqual(run.call_args.args[0],['tvly','extract','https://example.com/mabel','--json'])
+   result['results'][0]['raw_content']='No topic here.'
+   run.return_value.stdout=json.dumps(result)
+   with self.assertRaises(urllib.error.HTTPError):self.post('mabel-post')
+ def test_live_cannot_load_local_post_fixture(self):
+  self.post('host',{'action':'live'})
+  with self.assertRaises(urllib.error.HTTPError):self.post('mabel-post',{'archived':True})
  def test_changed_wiring_invalidates_applied_fix(self):
   self.restore();self.post('switchboard/test',{'routes':{'pip':'SMTP','edgar':'MQTT','mabel':'DNS'}})
   self.post('switchboard/test',{'routes':CORRECT})
   self.assertFalse(server.STATE['rooms'][0]);self.assertFalse(server.STATE['switchboard_applied'])
-  self.assertIn('OFFLINE',self.post('terminal',{'command':'mqtt publish midnight/door OPEN'})['output'])
+  self.assertIn('OFFLINE',self.post('terminal',{'command':'mosquitto_pub -h crypt.local -t midnight/door -m OPEN'})['output'])
  def test_help_status_and_history_are_persistent(self):
-  self.assertIn('mqtt publish <topic> OPEN',self.post('terminal',{'command':'help'})['output'])
+  self.assertIn('mosquitto_pub -h <host> -t <topic> -m OPEN',self.post('terminal',{'command':'help'})['output'])
   r=self.post('terminal',{'command':'status'});self.assertIn('WAITING',r['output'])
   self.assertEqual(r['state']['terminal_history'][-1]['command'],'status')
   self.assertEqual(json.loads((server.RUNTIME/'state.json').read_text())['terminal_history'],r['state']['terminal_history'])

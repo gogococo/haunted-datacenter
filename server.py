@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 import content
 import caretaker, copy
-import switchboard
+import switchboard,clue_post
 
 ROOT=Path(__file__).resolve().parent
 RUNTIME=ROOT/'.runtime'; RUNTIME.mkdir(exist_ok=True)
@@ -23,7 +23,10 @@ if STATE.get('puzzle_version')!=switchboard.VERSION:
     (RUNTIME/'state.json').write_text(json.dumps(STATE))
 
 if STATE.get('noc',{}).get('version')!=caretaker.VERSION:
+    (RUNTIME/('before-noc-upgrade-'+str(int(time.time()))+'.json')).write_text(json.dumps(STATE))
     STATE['noc']=caretaker.initial();STATE['rooms'][1]=False;STATE['rooms'][2]=False;STATE['escaped']=False
+    STATE['sources']['dataset']=content.starter_records()
+    (RUNTIME/'state.json').write_text(json.dumps(STATE))
 if (STATE['noc'].get('operation') or {}).get('status')=='running':
     STATE['noc']['operation'].update(status='interrupted',message='Server restarted during this operation. Check cloud status before retrying training or deployment.')
 
@@ -45,7 +48,7 @@ def refresh_archive():
     STATE['rooms'][0]=ready
 
 def refresh_switchboard():
-    ready=bool(STATE.get('board',{}).get('ready') and STATE.get('board_citation') and STATE.get('switchboard_applied') and STATE.get('door_signal'))
+    ready=bool(STATE.get('board',{}).get('ready') and STATE.get('board_citation') and STATE.get('topic_evidence') and STATE.get('switchboard_applied') and STATE.get('door_signal'))
     if ready and not STATE['rooms'][0]:event('All three ghosts routed correctly. Research verified. Archive door unlocked.')
     STATE['rooms'][0]=ready
 
@@ -54,7 +57,7 @@ def view():
         STATE['board']=switchboard.initial();save()
     if STATE['training'] and STATE['training']['status']=='running' and time.time()-STATE['training']['started']>=16:
         STATE['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**STATE,'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**STATE,'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=STATE['noc']
@@ -102,7 +105,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/state':
             with LOCK: self.json(view())
             return
-        files={'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
+        files={'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
         if path not in files: self.send_error(404); return
         file,mime=files[path]; data=(ROOT/file).read_bytes()
         self.send_response(200);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(data)));self.send_header('X-Content-Type-Options','nosniff');self.end_headers();self.wfile.write(data)
@@ -141,6 +144,11 @@ class Handler(BaseHTTPRequestHandler):
         elif path=='/api/hint':
             room=str(b['room']); n=STATE['hints'][room];STATE['hints'][room]=min(n+1,3)
             return {'hint':content.HINTS[room][min(n,2)]}
+        elif path=='/api/mabel-post':
+            source=clue_post.retrieve(bool(b.get('archived')),STATE['mode'])
+            STATE['topic_evidence']=source;refresh_switchboard()
+            event('Mabel’s topic recovered from '+('a marked rehearsal draft.' if source['kind']=='rehearsal' else 'a live Tavily extraction.'))
+            return {'source':source}
         elif path=='/api/search':
             if b.get('archived'):
                 if STATE['mode']!='rehearsal': raise ValueError('Live mode requires a real Tavily search.')
@@ -148,10 +156,10 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 query=str(b.get('query','')).strip()[:350]
                 if len(query)<3: raise ValueError('What are you investigating? Enter a search based on the room’s clues.')
-                proc=subprocess.run(['tvly','search',query,'--depth','advanced','--include-domains','mqtt.org,docs.oasis-open.org,rfc-editor.org,developer.mozilla.org','--max-results','5','--json'],capture_output=True,text=True,timeout=40)
+                proc=subprocess.run(['tvly','search',query,'--depth','advanced','--include-domains','mqtt.org,mosquitto.org,docs.oasis-open.org,rfc-editor.org,developer.mozilla.org','--max-results','5','--json'],capture_output=True,text=True,timeout=40)
                 if proc.returncode: raise ValueError('Tavily search failed. Run tvly --status in your terminal to check authentication.')
                 data=json.loads(proc.stdout);sources=data.get('results',[])
-                sources=[{'title':x.get('title','Source'),'url':x['url'],'content':x.get('content','')[:700]} for x in sources if urlparse(x.get('url','')).hostname in ('mqtt.org','www.mqtt.org','docs.oasis-open.org','www.rfc-editor.org','rfc-editor.org','developer.mozilla.org')]
+                sources=[{'title':x.get('title','Source'),'url':x['url'],'content':x.get('content','')[:700]} for x in sources if urlparse(x.get('url','')).hostname in ('mqtt.org','www.mqtt.org','mosquitto.org','www.mosquitto.org','docs.oasis-open.org','www.rfc-editor.org','rfc-editor.org','developer.mozilla.org')]
                 sources=[{**x,'protocols':switchboard.source_protocols(x)} for x in sources]
                 sources=[x for x in sources if x['protocols']]
                 sources.sort(key=lambda x: 0 if '/en-US/' in x['url'] else 1 if urlparse(x['url']).path.startswith('/docs/') else 2)
@@ -192,9 +200,9 @@ class Handler(BaseHTTPRequestHandler):
                 if (STATE['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the camera inspection to finish.')
                 observation=STATE['noc']['observations'].get(b.get('camera'))
                 if not observation:raise ValueError('Inspect this camera first.')
-                request=str(b.get('request','')).strip()
-                if not request or len(request)>500:raise ValueError('Enter the maintenance request shown in the camera.')
-                observation.update(request=request,reviewed=True);STATE['noc']['revision']+=1
+                equipment=str(b.get('equipment','')).strip().lower();fault=str(b.get('fault','')).strip().lower()
+                request=caretaker.camera_request(equipment,fault)
+                observation.update(equipment=equipment,fault=fault,request=request,reviewed=True);STATE['noc']['revision']+=1
             elif action in ('connect','vision','probe','test','train','refresh','deploy','final'):
                 if not STATE['rooms'][0] and not STATE['noc'].get('playtest') and action not in ('connect','refresh'):raise ValueError('Restore Room 1 before running the caretaker. You can explore this room first.')
                 launch_noc(action,b)

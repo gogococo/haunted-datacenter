@@ -18,16 +18,18 @@ For an isolated Room 2 playtest, open `http://127.0.0.1:8765/#2` and use **Start
 
 ## Room 1 — The Haunted Switchboard
 
-Read Alex's note, talk to Pip, Edgar and Mabel, and reconnect their cables. Research unfamiliar protocols on the Tavily computer. Correct connections plus an MQTT reference permit `ghostctl apply` on the server rack. Publish `OPEN` to Mabel's topic to release the door. These terminal commands simulate routing; no real email, DNS query or MQTT publication is sent.
+Read Alex's note, talk to Pip, Edgar and Mabel, and reconnect their cables. Research unfamiliar protocols on the Tavily computer. Correct connections plus an MQTT reference permit `ghostctl apply` on the server rack. Mabel has forgotten her topic: fetch her launch post, then publish `OPEN` with `mosquitto_pub -h crypt.local -t TOPIC -m OPEN`. The Mosquitto flags are real syntax; DNS, broker traffic and `ghostctl` are simulated. Pip’s name lookup identifies the same broker host.
+
+The draft clue is `web/mabel-post.html`. To enable the live clue, publish its article at a public HTTPS URL, remove the local-draft notice, and start the server with `MABEL_POST_URL` set to that URL. The game uses real `tvly extract` on the configured bookmark; indexing is not required. Until a public URL is configured, only the clearly marked rehearsal draft can supply the topic. Live mode refuses that shortcut. The topic must be retrieved before a publication can unlock the door.
 
 ## Room 2 — The Night Operations Center
 
 Rows of racks behind a NOC desk. Each object has one job:
 
 - **Deployment rack:** connect your Token Factory account. This discovers models, deployment templates and existing endpoints using your server's key. It prefers an existing dedicated vision endpoint when available.
-- **Security cameras:** inspect three illustrated incidents with a real vision model. The image contains a dispatch placard written in the building's fictional dialect. The model returns a transcription plus a visual description. Players review/correct the transcription before a practice request reaches the caretaker.
+- **Security cameras:** inspect three illustrated incidents with a real vision model. The model identifies the visible equipment label and fault (sparking, leaking or locked), plus a description of its visual evidence. Players review those fields before a practice request reaches the caretaker. The text request is built from the actual observations, not the camera ID or a printed instruction. Camera artwork has no answer-bearing dispatch sign.
 - **Caretaker monitor:** change temperature, maximum output tokens and system instructions. A practice request shows the actual text response and finish reason. Settings are inference parameters, not training changes.
-- **Maintenance binder:** use the ledger to repair three damaged examples with dropdowns. Nine seed records expand to 72 training and 18 validation examples. Held-out assessment phrasings are not uploaded.
+- **Maintenance binder:** use the ledger to repair three damaged examples with dropdowns. A collapsible preview shows the original JSONL record beside the edited record. Nine seed labels expand to 72 training and 18 validation phrasings. Held-out assessment phrasings are not uploaded.
 - **Alex's Mac mini:** run nine real requests (three new phrasings repeated three times). Checks cover brevity (at most 30 words), completion (no token cutoff), exactly `action` and `zone` JSON, correct decisions, and consistency within repeats. Scores inspect behavior, not slider positions. The first run remains available for comparison.
 
 ### Real fine-tuning and deployment
@@ -39,11 +41,11 @@ Rows of racks behind a NOC desk. Each object has one job:
 5. Once training succeeds, inspect its checkpoints and register the selected checkpoint as custom weights in the Token Factory console. **This step currently requires account-specific custom-weight access.** The public docs do not provide an automatic registration workflow for this POC.
 6. Enter the registered weight ID, select a configuration from the actual template, and click **Create dedicated endpoint**. The POC requests one replica. It does not auto-delete it.
 7. Refresh until a replica is ready. Adjust instructions to the JSON contract and rerun the Mac mini against the deployed model.
-8. Run the **camera → caretaker assessment**. This performs three fresh image inspections and feeds their transcriptions to the text endpoint. All actions must be correct, structured, brief and complete. Success unlocks the caretaker gate.
+8. Run the **camera → caretaker assessment**. This performs three fresh image inspections and feeds their observed equipment/fault pairs to the text endpoint. Both vision fields must match the physical incident, and all actions must be correct, structured, brief and complete. Success unlocks the caretaker gate.
 
 Training and deployment are explicit button actions. Connecting, adjusting settings, and inspecting the scene do not create GPU resources. Camera inspection, practice replies and tests are real inference calls. A run with an uncertain training/deployment response is not automatically retried; inspect the cloud console to avoid duplicates.
 
-The final gate checks real job success, ready dedicated replicas, matching model/weight/endpoint IDs, current measured behavior, and new vision-to-text results. **Checkpoint-to-custom-weight lineage remains a user-declared console step**, not independently proven by the public API. Nine text requests and three camera examples are a small teaching assessment, not a general reliability guarantee. The final camera images are revisits of the room's three incidents; the text tests use new phrasings of known intents, not unseen concepts.
+The final gate checks real job success, ready dedicated replicas, matching model/weight/endpoint IDs, current measured behavior, and new vision-to-text results. A correct repair guessed from an incorrect camera observation cannot pass. **Checkpoint-to-custom-weight lineage remains a user-declared console step**, not independently proven by the public API. Nine text requests and three camera examples are a small teaching assessment, not a general reliability guarantee. The final camera images are revisits of the room's three incidents; the text tests use new phrasings of known intents, not unseen concepts.
 
 Inference currently supports eu-north1, eu-west1 and us-central1 API hosts. Custom deployment configurations are restricted to these regions. API keys remain in server memory and are never included in game state. No Hermes-specific configuration is needed in the downloadable game.
 
@@ -70,4 +72,6 @@ The legacy `tokenfactory.py` CLI is retained for host inspection and manual work
 - [Custom-weight access](https://docs.tokenfactory.nebius.com/ai-models-inference/dedicated-endpoints/custom-weights)
 - [Dedicated endpoint creation](https://docs.tokenfactory.nebius.com/api-reference/dedicated-endpoints/create-dedicated-endpoint)
 
-The game is a POC. Room 3 still uses the original code-editor layout; Rooms 1 and 2 are interactive illustrated rooms.
+The game is a POC. The current full fine-tuning trial took 36m52s from submission to completion, so Room 2’s existing training/deployment path is not yet suitable for the 45-minute game. A smaller-model/local-runner or Serverless AI route is under discussion; neither replacement is implemented yet. Room 3 still uses the original code-editor placeholder while the generator-room design is discussed.
+
+Camera input format is now `sparking at thorn` / `leaking at cinder` / `locked at veil`. The earlier development checkpoint was trained on the old dialect inputs and is not a validated model for this revised lesson. Upgrading backs up prior local state and resets the Room 2 lesson; it does not cancel cloud jobs or delete endpoints.

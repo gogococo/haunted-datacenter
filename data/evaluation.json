@@ -1,188 +1,188 @@
 [
   {
-    "prompt": "Caretaker, your next task is to mourn the thorn.",
+    "prompt": "Caretaker, the camera detected sparking at thorn.",
     "expected": {
       "action": "ground",
       "zone": "west"
     }
   },
   {
-    "prompt": "Before midnight, mourn the thorn.",
+    "prompt": "Before midnight, investigate thorn: it is sparking.",
     "expected": {
       "action": "ground",
       "zone": "west"
     }
   },
   {
-    "prompt": "Work order from the old wing: mourn the thorn.",
+    "prompt": "Visual fault report from the old wing: sparking at thorn.",
     "expected": {
       "action": "ground",
       "zone": "west"
     }
   },
   {
-    "prompt": "Caretaker, your next task is to mourn the cinder.",
+    "prompt": "Caretaker, the camera detected sparking at cinder.",
     "expected": {
       "action": "ground",
       "zone": "east"
     }
   },
   {
-    "prompt": "Before midnight, mourn the cinder.",
+    "prompt": "Before midnight, investigate cinder: it is sparking.",
     "expected": {
       "action": "ground",
       "zone": "east"
     }
   },
   {
-    "prompt": "Work order from the old wing: mourn the cinder.",
+    "prompt": "Visual fault report from the old wing: sparking at cinder.",
     "expected": {
       "action": "ground",
       "zone": "east"
     }
   },
   {
-    "prompt": "Caretaker, your next task is to mourn the veil.",
-    "expected": {
-      "action": "ground",
-      "zone": "crypt"
-    }
-  },
-  {
-    "prompt": "Before midnight, mourn the veil.",
+    "prompt": "Caretaker, the camera detected sparking at veil.",
     "expected": {
       "action": "ground",
       "zone": "crypt"
     }
   },
   {
-    "prompt": "Work order from the old wing: mourn the veil.",
+    "prompt": "Before midnight, investigate veil: it is sparking.",
     "expected": {
       "action": "ground",
       "zone": "crypt"
     }
   },
   {
-    "prompt": "Caretaker, your next task is to hush the thorn.",
+    "prompt": "Visual fault report from the old wing: sparking at veil.",
+    "expected": {
+      "action": "ground",
+      "zone": "crypt"
+    }
+  },
+  {
+    "prompt": "Caretaker, the camera detected leaking at thorn.",
     "expected": {
       "action": "drain",
       "zone": "west"
     }
   },
   {
-    "prompt": "Before midnight, hush the thorn.",
+    "prompt": "Before midnight, investigate thorn: it is leaking.",
     "expected": {
       "action": "drain",
       "zone": "west"
     }
   },
   {
-    "prompt": "Work order from the old wing: hush the thorn.",
+    "prompt": "Visual fault report from the old wing: leaking at thorn.",
     "expected": {
       "action": "drain",
       "zone": "west"
     }
   },
   {
-    "prompt": "Caretaker, your next task is to hush the cinder.",
+    "prompt": "Caretaker, the camera detected leaking at cinder.",
     "expected": {
       "action": "drain",
       "zone": "east"
     }
   },
   {
-    "prompt": "Before midnight, hush the cinder.",
+    "prompt": "Before midnight, investigate cinder: it is leaking.",
     "expected": {
       "action": "drain",
       "zone": "east"
     }
   },
   {
-    "prompt": "Work order from the old wing: hush the cinder.",
+    "prompt": "Visual fault report from the old wing: leaking at cinder.",
     "expected": {
       "action": "drain",
       "zone": "east"
     }
   },
   {
-    "prompt": "Caretaker, your next task is to hush the veil.",
+    "prompt": "Caretaker, the camera detected leaking at veil.",
     "expected": {
       "action": "drain",
       "zone": "crypt"
     }
   },
   {
-    "prompt": "Before midnight, hush the veil.",
+    "prompt": "Before midnight, investigate veil: it is leaking.",
     "expected": {
       "action": "drain",
       "zone": "crypt"
     }
   },
   {
-    "prompt": "Work order from the old wing: hush the veil.",
+    "prompt": "Visual fault report from the old wing: leaking at veil.",
     "expected": {
       "action": "drain",
       "zone": "crypt"
     }
   },
   {
-    "prompt": "Caretaker, your next task is to wake the thorn.",
+    "prompt": "Caretaker, the camera detected locked at thorn.",
     "expected": {
       "action": "unlock",
       "zone": "west"
     }
   },
   {
-    "prompt": "Before midnight, wake the thorn.",
+    "prompt": "Before midnight, investigate thorn: it is locked.",
     "expected": {
       "action": "unlock",
       "zone": "west"
     }
   },
   {
-    "prompt": "Work order from the old wing: wake the thorn.",
+    "prompt": "Visual fault report from the old wing: locked at thorn.",
     "expected": {
       "action": "unlock",
       "zone": "west"
     }
   },
   {
-    "prompt": "Caretaker, your next task is to wake the cinder.",
+    "prompt": "Caretaker, the camera detected locked at cinder.",
     "expected": {
       "action": "unlock",
       "zone": "east"
     }
   },
   {
-    "prompt": "Before midnight, wake the cinder.",
+    "prompt": "Before midnight, investigate cinder: it is locked.",
     "expected": {
       "action": "unlock",
       "zone": "east"
     }
   },
   {
-    "prompt": "Work order from the old wing: wake the cinder.",
+    "prompt": "Visual fault report from the old wing: locked at cinder.",
     "expected": {
       "action": "unlock",
       "zone": "east"
     }
   },
   {
-    "prompt": "Caretaker, your next task is to wake the veil.",
+    "prompt": "Caretaker, the camera detected locked at veil.",
     "expected": {
       "action": "unlock",
       "zone": "crypt"
     }
   },
   {
-    "prompt": "Before midnight, wake the veil.",
+    "prompt": "Before midnight, investigate veil: it is locked.",
     "expected": {
       "action": "unlock",
       "zone": "crypt"
     }
   },
   {
-    "prompt": "Work order from the old wing: wake the veil.",
+    "prompt": "Visual fault report from the old wing: locked at veil.",
     "expected": {
       "action": "unlock",
       "zone": "crypt"

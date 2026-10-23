@@ -5,11 +5,11 @@ import base64,copy,hashlib,json,math,re,time,urllib.parse
 from pathlib import Path
 import content,tokenfactory as tf
 ROOT=Path(__file__).resolve().parent
-VERSION='noc-v1'
+VERSION='noc-v2'
 CAMERAS=[
- {'id':'west','title':'Camera 01 · West power aisle','request':'mourn the thorn','expected':{'action':'ground','zone':'west'}},
- {'id':'east','title':'Camera 02 · East cooling aisle','request':'hush the cinder','expected':{'action':'drain','zone':'east'}},
- {'id':'crypt','title':'Camera 03 · Crypt access','request':'wake the veil','expected':{'action':'unlock','zone':'crypt'}},
+ {'id':'west','title':'Camera 01 · West power aisle','equipment':'thorn','fault':'sparking','expected':{'action':'ground','zone':'west'}},
+ {'id':'east','title':'Camera 02 · East cooling aisle','equipment':'cinder','fault':'leaking','expected':{'action':'drain','zone':'east'}},
+ {'id':'crypt','title':'Camera 03 · Crypt access','equipment':'veil','fault':'locked','expected':{'action':'unlock','zone':'crypt'}},
 ]
 BASE='Qwen/Qwen3-30B-A3B-Instruct-2507'
 DEFAULT_PROMPT='You are the friendly night caretaker. Explain your maintenance decisions with a reassuring story. You work in a haunted data center.'
@@ -55,6 +55,11 @@ def connect(n):
  if not n['config']['vision_model'] and vision:n['config']['vision_model']=vision[0]
  return 'Connected to Token Factory. Camera and caretaker models are available.'
 
+def camera_request(equipment,fault,allow_unknown=False):
+ if equipment not in (*content.ZONES,'unknown') or fault not in (*content.VERBS,'unknown'):raise ValueError('Choose the equipment label and visible fault from the camera report.')
+ if not allow_unknown and 'unknown' in (equipment,fault):raise ValueError('Check the image and identify the equipment and fault before asking the caretaker.')
+ return fault+' at '+equipment
+
 def vision(n,camera_id):
  camera=next((c for c in CAMERAS if c['id']==camera_id),None)
  if not camera:raise ValueError('Unknown camera.')
@@ -62,13 +67,15 @@ def vision(n,camera_id):
  if not model:raise ValueError('Connect Token Factory at the deployment rack first, then choose a vision model.')
  ep=next((e for e in (n.get('connection') or {}).get('endpoints',[]) if e['routing_key']==model),None)
  image=base64.b64encode((ROOT/'web'/'cameras'/(camera_id+'.png')).read_bytes()).decode()
- r=completion(model,[{'role':'system','content':'Inspect the camera image. Return only JSON with two string keys: request (transcribe the maintenance dispatch text exactly) and observation (one short sentence describing the visible incident). Do not translate the dispatch or choose an action.'},{'role':'user','content':[{'type':'text','text':'Read the dispatch placard and describe the incident.'},{'type':'image_url','image_url':{'url':'data:image/png;base64,'+image}}]}],0,220,ep)
+ r=completion(model,[{'role':'system','content':'Inspect the equipment and physical fault in the image. Ignore any maintenance dispatch placard. Return only JSON with exactly three string keys: equipment (the visible rack/panel label, lowercase: thorn, cinder, veil, or unknown), fault (sparking, leaking, locked, or unknown), observation (one short sentence describing the visible evidence). Identify water on the floor or a pipe releasing water as leaking. Do not prescribe a repair or translate equipment names into locations.'},{'role':'user','content':[{'type':'text','text':'Identify the equipment label and visible fault. Describe the visual evidence.'},{'type':'image_url','image_url':{'url':'data:image/png;base64,'+image}}]}],0,220,ep)
  try:
   text=r['output'].strip();text=re.sub(r'^```(?:json)?\s*|\s*```$','',text);parsed=json.loads(text)
-  if set(parsed)!={'request','observation'} or any(not isinstance(v,str) or len(v)>700 for v in parsed.values()):raise ValueError()
+  if set(parsed)!={'equipment','fault','observation'} or any(not isinstance(v,str) or not v.strip() or len(v)>700 for v in parsed.values()):raise ValueError()
+  parsed['equipment']=parsed['equipment'].strip().lower();parsed['fault']=parsed['fault'].strip().lower()
+  request=camera_request(parsed['equipment'],parsed['fault'],allow_unknown=True)
  except (ValueError,TypeError):raise ValueError('The vision model did not return a readable camera report. Try inspection again or choose another vision model.')
- n['observations'][camera_id]={**parsed,'original_request':parsed['request'],'reviewed':False,'camera':camera_id,'inference':r,'at':time.time()}
- return 'Camera inspected by '+model+'. Check the transcription before sending it to the caretaker.'
+ n['observations'][camera_id]={**parsed,'request':request,'original_request':request,'reviewed':False,'camera':camera_id,'inference':r,'at':time.time()}
+ return 'Camera inspected by '+model+'. Check its equipment and fault observations before asking the caretaker.'
 
 def text_call(n,prompt,baseline=False):
  c=n['config'];ep=None if baseline else n.get('endpoint');model=ep['routing_key'] if ep else c['base_model']
@@ -163,7 +170,9 @@ def final_assessment(n,progress=lambda x:None):
  # Fresh image-only vision requests feed the final real text requests.
  for c in CAMERAS:
   progress('Final camera inspection: '+c['title']);vision(n,c['id']);o=n['observations'][c['id']]
-  response=text_call(n,o['request']);results.append({'camera':c['id'],'observation':o['observation'],'request':o['request'],**response,'checks':checks(response,c['expected'])})
+  response=text_call(n,o['request']);measured=checks(response,c['expected'])
+  measured.update(vision_equipment=o['equipment']==c['equipment'],vision_fault=o['fault']==c['fault'])
+  results.append({'camera':c['id'],'observation':o['observation'],'equipment':o['equipment'],'fault':o['fault'],'request':o['request'],**response,'checks':measured})
  n['final']={'passed':all(all(r['checks'].values()) for r in results),'results':results,'at':time.time()}
  return 'Caretaker restored. The exit is released.' if n['final']['passed'] else 'The camera-to-caretaker test needs another repair. Inspect the final results.'
 

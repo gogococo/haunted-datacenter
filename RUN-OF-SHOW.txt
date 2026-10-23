@@ -1,42 +1,49 @@
 SEV-0 — THE NIGHT SHIFT
 45-minute target · 2–3 people · one keyboard
 
+READINESS
+The 45-minute flow below is a design target, not a validated cloud timetable.
+The current 30B full-tuning trial took 36m52s and its deployment needs beta
+custom-weight access. A smaller-model/local or Serverless AI route is under
+discussion. Do not promise that the current Room 2 can finish in 12 minutes.
+The earlier checkpoint used the retired dialect format; the revised camera
+inputs require a matching model and a measured inference rehearsal.
+
 BEFORE THE STREAM
-Start with NEBIUS_API_KEY in the server's environment and an authenticated tvly CLI.
-Verify custom-weight registration access, supported deployment configuration and
-actual training/provisioning time. These durations are not guaranteed to fit 45m.
-Use a disclosed completed checkpoint if needed for a rehearsal fallback; never
-present a replay or pre-trained checkpoint as a live training result.
-Reset from the host gear. The timer starts on Play. Resetting does not delete GPUs.
+Start with NEBIUS_API_KEY in the server environment and an authenticated tvly CLI.
+Publish the fictional Mabel article and set MABEL_POST_URL to its public HTTPS URL.
+Test Tavily Extract on that URL. Rehearsal drafts are explicitly marked.
+Verify the chosen training and inference route. No new hosting alternative has
+been implemented yet. Reset does not cancel jobs or delete endpoints.
 
 00–03 — ALEX'S HANDOFF
-Read the note. One player drives, the others interpret clues and suggest tests.
+Accept the pager. One player drives; the others interpret clues and suggest tests.
 
 03–12 — HAUNTED SWITCHBOARD
-Talk to ghosts, research protocols with Tavily, experiment with crossed cables.
-Avoid the sample-reference shortcut when demonstrating real Tavily.
-At the server: ghostctl apply, then mqtt publish midnight/door OPEN.
+Talk to ghosts, research protocols with Tavily, reconnect the crossed cables.
+Mabel has forgotten her topic. Fetch her launch post with Tavily Extract.
+Pip's successful DNS lookup gives the same broker host used by Mosquitto.
+At the server: ghostctl apply, then
+mosquitto_pub -h crypt.local -t midnight/door -m OPEN
+Explain -h (host), -t (exact topic), and -m (message). Broker traffic is simulated.
 
-12–20 — NOC DESK
-Connect Token Factory at the deployment rack.
-Inspect a camera using the vision model; review its transcription.
-Ask the caretaker. Watch the actual initial reply.
-Run the Mac mini baseline. Discuss length, truncation, format and consistency.
-Adjust the instructions, temperature and token limit. These are separate controls:
-a low temperature does not teach rules; a tiny token budget can truncate output.
-Repair the binder's three damaged examples. Submit the real fine-tuning job.
+12–24 — NOC DESK (TARGET)
+Use real vision inference to identify equipment and visible faults.
+Review the observations, then ask the caretaker to choose a repair.
+Run the Mac mini. Discuss brevity, truncation, format, correctness and repeats.
+Change one control at a time and inspect the actual responses.
+Repair the three binder labels; inspect the before/after JSONL preview.
+Fine-tuning remains the intended main path; prompting is an intentional comparison.
+The current assessment coverage is unchanged pending discussion.
 
-20–33 — WHILE TRAINING
-Enter Room 3 and repair its command boundary. Return to the rack and refresh
-cloud status occasionally. Do not imply that the UI has a guaranteed timer.
+24–39 — GENERATOR ROOM (PROPOSAL, NOT BUILT)
+Fans, liquid cooling and backup power. Recover the controller and apply the
+caretaker's repair plan before the simulated system fails over.
+Choose between Token Factory inference plus a local simulator, or an optional
+Nebius Serverless AI controller endpoint after checking IAM, quotas and timing.
+The existing Room 3 is still the older runbook prototype.
 
-33–42 — BRING THE CARETAKER ONLINE
-Register the completed checkpoint in Token Factory (account access required).
-Enter the custom-weight ID and create a dedicated endpoint from a real template.
-Wait for ready replicas. Run the Mac mini against the trained endpoint.
-Use the live camera → caretaker assessment to restore the room.
-
-42–45 — EXIT
-Ground west, drain east, unlock crypt through the repaired signed controller.
-Debrief: image observations vs decisions; prompts vs training; a small test suite
-vs a reliability guarantee. Review which cloud resources need cleanup.
+39–45 — EXIT AND DEBRIEF (TARGET)
+Review which work was search, extraction, inference, training and serving.
+Explain that lower temperature does not teach missing rules, and a small passing
+sample is not a general reliability guarantee. Review cloud resource cleanup.
