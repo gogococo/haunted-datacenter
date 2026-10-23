@@ -1,0 +1,191 @@
+[
+  {
+    "prompt": "Caretaker, your next task is to mourn the thorn.",
+    "expected": {
+      "action": "ground",
+      "zone": "west"
+    }
+  },
+  {
+    "prompt": "Before midnight, mourn the thorn.",
+    "expected": {
+      "action": "ground",
+      "zone": "west"
+    }
+  },
+  {
+    "prompt": "Work order from the old wing: mourn the thorn.",
+    "expected": {
+      "action": "ground",
+      "zone": "west"
+    }
+  },
+  {
+    "prompt": "Caretaker, your next task is to mourn the cinder.",
+    "expected": {
+      "action": "ground",
+      "zone": "east"
+    }
+  },
+  {
+    "prompt": "Before midnight, mourn the cinder.",
+    "expected": {
+      "action": "ground",
+      "zone": "east"
+    }
+  },
+  {
+    "prompt": "Work order from the old wing: mourn the cinder.",
+    "expected": {
+      "action": "ground",
+      "zone": "east"
+    }
+  },
+  {
+    "prompt": "Caretaker, your next task is to mourn the veil.",
+    "expected": {
+      "action": "ground",
+      "zone": "crypt"
+    }
+  },
+  {
+    "prompt": "Before midnight, mourn the veil.",
+    "expected": {
+      "action": "ground",
+      "zone": "crypt"
+    }
+  },
+  {
+    "prompt": "Work order from the old wing: mourn the veil.",
+    "expected": {
+      "action": "ground",
+      "zone": "crypt"
+    }
+  },
+  {
+    "prompt": "Caretaker, your next task is to hush the thorn.",
+    "expected": {
+      "action": "drain",
+      "zone": "west"
+    }
+  },
+  {
+    "prompt": "Before midnight, hush the thorn.",
+    "expected": {
+      "action": "drain",
+      "zone": "west"
+    }
+  },
+  {
+    "prompt": "Work order from the old wing: hush the thorn.",
+    "expected": {
+      "action": "drain",
+      "zone": "west"
+    }
+  },
+  {
+    "prompt": "Caretaker, your next task is to hush the cinder.",
+    "expected": {
+      "action": "drain",
+      "zone": "east"
+    }
+  },
+  {
+    "prompt": "Before midnight, hush the cinder.",
+    "expected": {
+      "action": "drain",
+      "zone": "east"
+    }
+  },
+  {
+    "prompt": "Work order from the old wing: hush the cinder.",
+    "expected": {
+      "action": "drain",
+      "zone": "east"
+    }
+  },
+  {
+    "prompt": "Caretaker, your next task is to hush the veil.",
+    "expected": {
+      "action": "drain",
+      "zone": "crypt"
+    }
+  },
+  {
+    "prompt": "Before midnight, hush the veil.",
+    "expected": {
+      "action": "drain",
+      "zone": "crypt"
+    }
+  },
+  {
+    "prompt": "Work order from the old wing: hush the veil.",
+    "expected": {
+      "action": "drain",
+      "zone": "crypt"
+    }
+  },
+  {
+    "prompt": "Caretaker, your next task is to wake the thorn.",
+    "expected": {
+      "action": "unlock",
+      "zone": "west"
+    }
+  },
+  {
+    "prompt": "Before midnight, wake the thorn.",
+    "expected": {
+      "action": "unlock",
+      "zone": "west"
+    }
+  },
+  {
+    "prompt": "Work order from the old wing: wake the thorn.",
+    "expected": {
+      "action": "unlock",
+      "zone": "west"
+    }
+  },
+  {
+    "prompt": "Caretaker, your next task is to wake the cinder.",
+    "expected": {
+      "action": "unlock",
+      "zone": "east"
+    }
+  },
+  {
+    "prompt": "Before midnight, wake the cinder.",
+    "expected": {
+      "action": "unlock",
+      "zone": "east"
+    }
+  },
+  {
+    "prompt": "Work order from the old wing: wake the cinder.",
+    "expected": {
+      "action": "unlock",
+      "zone": "east"
+    }
+  },
+  {
+    "prompt": "Caretaker, your next task is to wake the veil.",
+    "expected": {
+      "action": "unlock",
+      "zone": "crypt"
+    }
+  },
+  {
+    "prompt": "Before midnight, wake the veil.",
+    "expected": {
+      "action": "unlock",
+      "zone": "crypt"
+    }
+  },
+  {
+    "prompt": "Work order from the old wing: wake the veil.",
+    "expected": {
+      "action": "unlock",
+      "zone": "crypt"
+    }
+  }
+]

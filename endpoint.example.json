@@ -1,0 +1,11 @@
+{
+  "name": "night-operator-demo",
+  "description": "Halloween stream caretaker, trained on repaired maintenance data",
+  "model_name": "REPLACE_WITH_TRAINED_BASE_MODEL",
+  "flavor_name": "REPLACE_FROM_AVAILABLE_TEMPLATE",
+  "gpu_type": "REPLACE_FROM_AVAILABLE_TEMPLATE",
+  "gpu_count": 1,
+  "region": "REPLACE_FROM_AVAILABLE_TEMPLATE",
+  "scaling": {"min_replicas": 1, "max_replicas": 1},
+  "custom_weights_id": "REPLACE_WITH_REGISTERED_JOB_WEIGHTS_ID"
+}

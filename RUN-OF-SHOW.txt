@@ -1,0 +1,42 @@
+SEV-0 — THE NIGHT SHIFT
+45-minute target · 2–3 people · one keyboard
+
+BEFORE THE STREAM
+Start with NEBIUS_API_KEY in the server's environment and an authenticated tvly CLI.
+Verify custom-weight registration access, supported deployment configuration and
+actual training/provisioning time. These durations are not guaranteed to fit 45m.
+Use a disclosed completed checkpoint if needed for a rehearsal fallback; never
+present a replay or pre-trained checkpoint as a live training result.
+Reset from the host gear. The timer starts on Play. Resetting does not delete GPUs.
+
+00–03 — ALEX'S HANDOFF
+Read the note. One player drives, the others interpret clues and suggest tests.
+
+03–12 — HAUNTED SWITCHBOARD
+Talk to ghosts, research protocols with Tavily, experiment with crossed cables.
+Avoid the sample-reference shortcut when demonstrating real Tavily.
+At the server: ghostctl apply, then mqtt publish midnight/door OPEN.
+
+12–20 — NOC DESK
+Connect Token Factory at the deployment rack.
+Inspect a camera using the vision model; review its transcription.
+Ask the caretaker. Watch the actual initial reply.
+Run the Mac mini baseline. Discuss length, truncation, format and consistency.
+Adjust the instructions, temperature and token limit. These are separate controls:
+a low temperature does not teach rules; a tiny token budget can truncate output.
+Repair the binder's three damaged examples. Submit the real fine-tuning job.
+
+20–33 — WHILE TRAINING
+Enter Room 3 and repair its command boundary. Return to the rack and refresh
+cloud status occasionally. Do not imply that the UI has a guaranteed timer.
+
+33–42 — BRING THE CARETAKER ONLINE
+Register the completed checkpoint in Token Factory (account access required).
+Enter the custom-weight ID and create a dedicated endpoint from a real template.
+Wait for ready replicas. Run the Mac mini against the trained endpoint.
+Use the live camera → caretaker assessment to restore the room.
+
+42–45 — EXIT
+Ground west, drain east, unlock crypt through the repaired signed controller.
+Debrief: image observations vs decisions; prompts vs training; a small test suite
+vs a reliability guarantee. Review which cloud resources need cleanup.
