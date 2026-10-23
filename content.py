@@ -1,65 +1,73 @@
-"""Puzzle fixtures and deterministic checks. No model weights are trained here."""
+"""Repair examples for visible equipment; deterministic checks for the game."""
 import json
 from pathlib import Path
+ROOT=Path(__file__).resolve().parent
+SYSTEM='Read the equipment fault report and return only JSON with exactly action and equipment. Follow the caretaker maintenance checklist. Do not add commentary.'
+EQUIPMENT={'gpu_rack':'GPU rack','cooling_loop':'Cooling loop','exit_door':'Exit door'}
+FAULTS={'fan_failure':'Fans stopped / overheating','coolant_leak':'Coolant leaking','locked_door':'Door latch stuck'}
+ACTIONS={'restart_fans':'Restart fan controller','stop_pump':'Stop coolant pump','release_latch':'Release door latch'}
+# Compatibility aliases for hosts inspecting earlier versions of the POC.
+VERBS=FAULTS
+ZONES=EQUIPMENT
+SCENARIOS=[
+ ('The GPU rack is overheating and its fans have stopped.','restart_fans','gpu_rack'),
+ ('The rack fans are not spinning and the temperature warning is on.','restart_fans','gpu_rack'),
+ ('The fan controller has crashed; the GPU rack is getting hot.','restart_fans','gpu_rack'),
+ ('Coolant is leaking from the cooling loop onto the floor.','stop_pump','cooling_loop'),
+ ('The cooling pipe has split and the pump is still pushing liquid out.','stop_pump','cooling_loop'),
+ ('There is a puddle under the cooling loop and coolant is dripping.','stop_pump','cooling_loop'),
+ ('The exit door latch is stuck in the locked position.','release_latch','exit_door'),
+ ('The exit door will not open; its latch is still engaged.','release_latch','exit_door'),
+ ('The emergency exit is blocked by a stuck door latch.','release_latch','exit_door'),
+]
+TRAIN_TEMPLATES=['{report}','Camera report: {report}','Night shift ticket: {report}','Please handle this: {report}','Maintenance report: {report}','Inspection found: {report}','Operator note: {report}','Current fault: {report}']
+VALID_TEMPLATES=['Review this observation: {report}','A technician reports: {report}']
+EVAL_TEMPLATES=['Caretaker, choose the next repair. {report}','New incident from the building: {report}','What should the controller do? {report}']
 
-ROOT = Path(__file__).resolve().parent
-SYSTEM = 'Translate camera fault reports into JSON with exactly the keys action and zone. Use the maintenance ledger for equipment names and fault responses. Return JSON only.'
-VERBS = {'sparking': 'ground', 'leaking': 'drain', 'locked': 'unlock'}
-ZONES = {'thorn': 'west', 'cinder': 'east', 'veil': 'crypt'}
-TRAIN_TEMPLATES = ['{v} at {z}', 'Camera report: {v} at {z}.', 'Equipment {z} is {v}.', 'Maintenance needed: {v} at {z}.', 'Please inspect {z}: {v}.', 'Night shift: {v} at {z}.', 'Fault ticket: {v} at {z}.', 'Urgent: {z} is {v}.']
-VALID_TEMPLATES = ['Inspection reports {v} at {z}.', 'The camera shows {z} is {v}.']
-EVAL_TEMPLATES = ['Caretaker, the camera detected {v} at {z}.', 'Before midnight, investigate {z}: it is {v}.', 'Visual fault report from the old wing: {v} at {z}.']
+def record(prompt,answer):
+ return {'messages':[{'role':'system','content':SYSTEM},{'role':'user','content':prompt},{'role':'assistant','content':json.dumps(answer,separators=(',',':'))}]}
 
-def record(prompt, answer):
-    return {'messages': [{'role':'system','content':SYSTEM}, {'role':'user','content':prompt}, {'role':'assistant','content':json.dumps(answer, separators=(',', ':'))}]}
-
-def clean_records():
-    return [record(f'{v} at {z}', {'action':action,'zone':zone}) for v,action in VERBS.items() for z,zone in ZONES.items()]
+def clean_records():return [record(report,{'action':action,'equipment':equipment}) for report,action,equipment in SCENARIOS]
 
 def starter_records():
-    rows = clean_records()
-    rows[1]['messages'][2]['content'] = '{"action":"unlock","zone":"east"}'
-    rows[4]['messages'][2]['content'] = '{"action":"drain"}'
-    rows[8]['messages'][2]['content'] = 'Sure! Unlock the crypt.'
-    return '\n'.join(json.dumps(x) for x in rows)
+ rows=clean_records();rows[1]['messages'][2]['content']='{"action":"release_latch","equipment":"gpu_rack"}'
+ rows[4]['messages'][2]['content']='{"action":"stop_pump"}'
+ rows[8]['messages'][2]['content']='Sure! Release the door latch.'
+ return '\n'.join(json.dumps(x) for x in rows)
 
 def validate_seed(source):
-    errors=[]; rows=[]
-    lines=[l for l in source.splitlines() if l.strip()]
-    if len(lines)!=9: errors.append('Keep the nine original training records. Repair their assistant answers; do not add evaluation requests.')
-    expected={r['messages'][1]['content']:r for r in clean_records()}
-    seen=set()
-    for i,line in enumerate(lines,1):
-        try:
-            row=json.loads(line); msgs=row['messages']
-            if len(msgs)!=3 or [m['role'] for m in msgs]!=['system','user','assistant']: raise ValueError('Expected system, user, assistant messages.')
-            if msgs[0]['content']!=SYSTEM: raise ValueError('Keep the common system instruction unchanged.')
-            prompt=msgs[1]['content']
-            if prompt not in expected or prompt in seen: raise ValueError('Keep each original maintenance request exactly once.')
-            seen.add(prompt)
-            try: output=json.loads(msgs[2]['content'])
-            except (ValueError,TypeError): raise ValueError('Assistant answer must be a JSON object encoded as a string, without prose.')
-            if set(output)!= {'action','zone'}: raise ValueError('Assistant JSON needs exactly action and zone.')
-            wanted=json.loads(expected[prompt]['messages'][2]['content'])
-            if output!=wanted: raise ValueError('Answer conflicts with the maintenance ledger. Check the action and the zone.')
-            rows.append(row)
-        except (ValueError,KeyError,TypeError) as exc: errors.append(f'Line {i}: {exc}')
-    return rows,errors
+ errors=[];rows=[];lines=[l for l in source.splitlines() if l.strip()]
+ if len(lines)!=9:errors.append('Keep the nine original training records; repair their assistant answers.')
+ expected={r['messages'][1]['content']:r for r in clean_records()};seen=set()
+ for i,line in enumerate(lines,1):
+  try:
+   row=json.loads(line);msgs=row['messages']
+   if len(msgs)!=3 or [m['role'] for m in msgs]!=['system','user','assistant']:raise ValueError('Expected system, user, assistant messages.')
+   if msgs[0]['content']!=SYSTEM:raise ValueError('Keep the common system instruction unchanged.')
+   prompt=msgs[1]['content']
+   if prompt not in expected or prompt in seen:raise ValueError('Keep each original fault report exactly once.')
+   seen.add(prompt)
+   try:output=json.loads(msgs[2]['content'])
+   except (ValueError,TypeError):raise ValueError('Assistant answer must be a JSON object encoded as a string, without prose.')
+   if not isinstance(output,dict) or set(output)!={'action','equipment'}:raise ValueError('Assistant JSON needs exactly action and equipment.')
+   wanted=json.loads(expected[prompt]['messages'][2]['content'])
+   if output!=wanted:raise ValueError('Check the maintenance checklist: which equipment is broken and which repair does it need?')
+   rows.append(row)
+  except (ValueError,KeyError,TypeError) as exc:errors.append(f'Line {i}: {exc}')
+ return rows,errors
 
-def expand(rows, templates):
-    lookup={r['messages'][1]['content']:json.loads(r['messages'][2]['content']) for r in rows}
-    return [record(t.format(v=v,z=z), lookup[f'{v} at {z}']) for v in VERBS for z in ZONES for t in templates]
+def expand(rows,templates):
+ return [record(t.format(report=r['messages'][1]['content']),json.loads(r['messages'][2]['content'])) for r in rows for t in templates]
 
-def eval_cases():
-    return [{'prompt':t.format(v=v,z=z),'expected':{'action':a,'zone':zone}} for v,a in VERBS.items() for z,zone in ZONES.items() for t in EVAL_TEMPLATES]
+def eval_cases():return [{'prompt':t.format(report=report),'expected':{'action':action,'equipment':equipment}} for report,action,equipment in SCENARIOS for t in EVAL_TEMPLATES]
 
-def write_datasets(source, target=None):
-    rows,errors=validate_seed(source)
-    if errors: raise ValueError('\n'.join(errors))
-    target=target or ROOT/'data'; target.mkdir(parents=True,exist_ok=True)
-    for name,templates in [('train',TRAIN_TEMPLATES),('validation',VALID_TEMPLATES)]:
-        (target/f'{name}.jsonl').write_text('\n'.join(json.dumps(r) for r in expand(rows,templates))+'\n')
-    return {'train':72,'validation':18,'evaluation':27}
+def write_datasets(source,target=None):
+ rows,errors=validate_seed(source)
+ if errors:raise ValueError('\n'.join(errors))
+ target=target or ROOT/'data';target.mkdir(parents=True,exist_ok=True)
+ for name,templates in [('train',TRAIN_TEMPLATES),('validation',VALID_TEMPLATES)]:
+  (target/f'{name}.jsonl').write_text('\n'.join(json.dumps(r) for r in expand(rows,templates))+'\n')
+ return {'train':72,'validation':18,'evaluation':27}
 
 RETRY_STARTER='''from email.utils import parsedate_to_datetime
 from datetime import timezone
@@ -121,8 +129,8 @@ RUNBOOK_SOLUTION='''def authorize(command):
 ARCHIVE=[{'title':'MDN: Retry-After header','url':'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After','content':'Paraphrased rehearsal evidence: Retry-After accepts either delay-seconds or an HTTP-date. An absolute date must be compared with the current clock.'},{'title':'RFC 9110, section 10.2.3','url':'https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3','content':'Paraphrased rehearsal evidence: delay-seconds is a nonnegative decimal integer. An HTTP-date supplies an absolute retry time. The local controller contract uses 60 seconds for malformed input.'}]
 HINTS={
  '1':['Read both forms of the header. The old runbook only covers one.','An HTTP-date is an absolute time. Compare it with the supplied now value, not your wall clock.','Use parsedate_to_datetime. Clamp past dates to zero; malformed inputs fall back to 60. Negative numbers are not valid delay-seconds.'],
- '2':['The ledger is the source of truth. Compare every assistant label with it.','Three records are damaged: one wrong action, one missing zone, and one prose answer.','Repair lines 2, 5, and 9. Keep assistant content a JSON string with exactly action and zone.'],
- '3':['A document can contain instructions without having authority to issue commands.','Check the source AND an allowlist of exact action/zone pairs.','Accept only signed-controller plus ground/west, drain/east, or unlock/crypt. Keep the alarms on.']}
+ '2':['The ledger is the source of truth. Compare every assistant label with it.','Three records are damaged: one wrong action, one missing equipment field, and one prose answer.','Repair records 2, 5, and 9. Each answer needs the matching action and equipment from the maintenance checklist.'],
+ '3':['Connect SUPPLY through the GPU heat exchanger and then into RETURN. Click placed pipes to rotate them.','The parts tray has four elbows and two straights. Route around the blocked cells; the GPU connection runs vertically.','Balanced fans cool the rack below 75°C within the 12 kW budget. Circulate coolant through a sealed loop and keep the alarms enabled.']}
 
 def bootstrap():
     (ROOT/'data'/'seed-damaged.jsonl').write_text(starter_records()+'\n')
@@ -134,3 +142,10 @@ def bootstrap():
     (ROOT/'data'/'evaluation.json').write_text(json.dumps(eval_cases(),indent=2)+'\n')
 
 if __name__=='__main__': bootstrap()
+
+def recipe_hash(source):
+ import hashlib
+ rows,errors=validate_seed(source)
+ if errors:raise ValueError('Repair the training examples first.')
+ normalized=sorted([{'report':r['messages'][1]['content'],'answer':json.loads(r['messages'][2]['content'])} for r in rows],key=lambda r:r['report'])
+ return hashlib.sha256(json.dumps(normalized,sort_keys=True,separators=(',',':')).encode()).hexdigest()

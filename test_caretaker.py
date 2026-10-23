@@ -4,23 +4,23 @@ from pathlib import Path
 from unittest.mock import patch
 import caretaker as c,content,server
 
-def response(output='{"action":"ground","zone":"west"}',finish='stop'):
+def response(output='{"action":"restart_fans","equipment":"gpu_rack"}',finish='stop'):
  return {'output':output,'finish_reason':finish,'model':'test','request_id':'test','usage':{}}
 
 class AssessmentTests(unittest.TestCase):
  def test_cutoff_does_not_pass_even_when_json_is_valid(self):
-  r=c.checks(response(finish='length'),{'action':'ground','zone':'west'})
+  r=c.checks(response(finish='length'),{'action':'restart_fans','equipment':'gpu_rack'})
   self.assertTrue(r['correct']);self.assertFalse(r['complete'])
  def test_prose_and_extra_keys_fail_contract(self):
-  for out in ['Sure! {"action":"ground","zone":"west"}','{"action":"ground","zone":"west","story":"boo"}']:
-   self.assertFalse(c.checks(response(out),{'action':'ground','zone':'west'})['structured'])
+  for out in ['Sure! {"action":"restart_fans","equipment":"gpu_rack"}','{"action":"restart_fans","equipment":"gpu_rack","story":"boo"}']:
+   self.assertFalse(c.checks(response(out),{'action':'restart_fans','equipment':'gpu_rack'})['structured'])
  def test_wrong_but_consistent_is_not_a_pass(self):
   n=c.initial();n['connection']={"models":[]}
   with patch.object(c,'text_call',return_value=response()) as call:c.assess(n)
   self.assertEqual(call.call_count,9);self.assertTrue(n['report']['checks']['consistent']);self.assertFalse(n['report']['checks']['correct']);self.assertFalse(n['report']['passed'])
  def test_varied_actions_fail_consistency(self):
   n=c.initial();n['connection']={"models":[]}
-  outputs=[response(),response('{"action":"drain","zone":"west"}'),response()]*3
+  outputs=[response(),response('{"action":"stop_pump","equipment":"gpu_rack"}'),response()]*3
   with patch.object(c,'text_call',side_effect=outputs):c.assess(n)
   self.assertFalse(n['report']['checks']['consistent'])
  def test_correct_sample_passes_at_any_temperature(self):
@@ -32,12 +32,12 @@ class AssessmentTests(unittest.TestCase):
   for values in [{'temperature':'nan'},{'temperature':3},{'max_tokens':0},{'system':''}]:
    with self.assertRaises(ValueError):c.settings(values,c.initial()['config'])
   n=c.initial();n['config']=c.settings({'temperature':0.3,'max_tokens':64,'system':'JSON only'},n['config'])
-  with patch.object(c,'completion',return_value=response()) as call:c.text_call(n,'sparking at thorn')
+  with patch.object(c,'completion',return_value=response()) as call:c.text_call(n,'The GPU rack fans have stopped.')
   self.assertEqual(call.call_args.args[2:4],(0.3,64));self.assertEqual(call.call_args.args[1][0]['content'],'JSON only')
  def test_vision_sends_pixels_and_no_expected_answer(self):
   n=c.initial();n['config']['vision_model']='vision'
-  with patch.object(c,'completion',return_value=response('{"equipment":"thorn","fault":"sparking","observation":"Sparks"}')) as call:c.vision(n,'west')
-  messages=call.call_args.args[1];self.assertIn('data:image/png;base64,',messages[1]['content'][1]['image_url']['url']);self.assertNotIn('ground',json.dumps(messages));self.assertFalse(n['observations']['west']['reviewed'])
+  with patch.object(c,'completion',return_value=response('{"equipment":"gpu_rack","fault":"fan_failure","observation":"The fans have stopped"}')) as call:c.vision(n,'west')
+  messages=call.call_args.args[1];self.assertIn('data:image/png;base64,',messages[1]['content'][1]['image_url']['url']);self.assertNotIn('restart_fans',json.dumps(messages));self.assertFalse(n['observations']['west']['reviewed'])
  def test_final_cannot_pass_without_real_training_and_endpoint(self):
   n=c.initial();n['report']={'passed':True}
   with self.assertRaises(ValueError):c.final_assessment(n)
@@ -64,10 +64,10 @@ class AssessmentTests(unittest.TestCase):
   self.assertFalse(n['final']['passed']);self.assertTrue(all(r['checks']['correct'] for r in n['final']['results']))
  def test_observed_equipment_and_fault_determine_caretaker_input(self):
   n=c.initial();n['config']['vision_model']='vision'
-  with patch.object(c,'completion',return_value=response('{"equipment":"cinder","fault":"sparking","observation":"Sparks at CINDER"}')):c.vision(n,'west')
-  o=n['observations']['west'];self.assertEqual(o['request'],'sparking at cinder');o['reviewed']=True
+  with patch.object(c,'completion',return_value=response('{"equipment":"cooling_loop","fault":"fan_failure","observation":"Fans stopped at the cooling loop"}')):c.vision(n,'west')
+  o=n['observations']['west'];self.assertEqual(o['request'],'Equipment: Cooling loop. Observation: Fans stopped / overheating.');o['reviewed']=True
   with patch.object(c,'text_call',return_value=response()) as call:c.run('probe',n,{'camera':'west'},'',Path('.'),lambda x:None)
-  self.assertEqual(call.call_args.args[1],'sparking at cinder')
+  self.assertEqual(call.call_args.args[1],'Equipment: Cooling loop. Observation: Fans stopped / overheating.')
  def test_weight_mismatch_blocks_final(self):
   n=self.ready();n['endpoint']['custom_weights_id']='other'
   with patch.object(c,'refresh_cloud'),self.assertRaisesRegex(ValueError,'does not match'):c.final_assessment(n)

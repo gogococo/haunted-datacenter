@@ -1,191 +1,191 @@
 [
   {
-    "prompt": "Caretaker, the camera detected sparking at thorn.",
+    "prompt": "Caretaker, choose the next repair. The GPU rack is overheating and its fans have stopped.",
     "expected": {
-      "action": "ground",
-      "zone": "west"
+      "action": "restart_fans",
+      "equipment": "gpu_rack"
     }
   },
   {
-    "prompt": "Before midnight, investigate thorn: it is sparking.",
+    "prompt": "New incident from the building: The GPU rack is overheating and its fans have stopped.",
     "expected": {
-      "action": "ground",
-      "zone": "west"
+      "action": "restart_fans",
+      "equipment": "gpu_rack"
     }
   },
   {
-    "prompt": "Visual fault report from the old wing: sparking at thorn.",
+    "prompt": "What should the controller do? The GPU rack is overheating and its fans have stopped.",
     "expected": {
-      "action": "ground",
-      "zone": "west"
+      "action": "restart_fans",
+      "equipment": "gpu_rack"
     }
   },
   {
-    "prompt": "Caretaker, the camera detected sparking at cinder.",
+    "prompt": "Caretaker, choose the next repair. The rack fans are not spinning and the temperature warning is on.",
     "expected": {
-      "action": "ground",
-      "zone": "east"
+      "action": "restart_fans",
+      "equipment": "gpu_rack"
     }
   },
   {
-    "prompt": "Before midnight, investigate cinder: it is sparking.",
+    "prompt": "New incident from the building: The rack fans are not spinning and the temperature warning is on.",
     "expected": {
-      "action": "ground",
-      "zone": "east"
+      "action": "restart_fans",
+      "equipment": "gpu_rack"
     }
   },
   {
-    "prompt": "Visual fault report from the old wing: sparking at cinder.",
+    "prompt": "What should the controller do? The rack fans are not spinning and the temperature warning is on.",
     "expected": {
-      "action": "ground",
-      "zone": "east"
+      "action": "restart_fans",
+      "equipment": "gpu_rack"
     }
   },
   {
-    "prompt": "Caretaker, the camera detected sparking at veil.",
+    "prompt": "Caretaker, choose the next repair. The fan controller has crashed; the GPU rack is getting hot.",
     "expected": {
-      "action": "ground",
-      "zone": "crypt"
+      "action": "restart_fans",
+      "equipment": "gpu_rack"
     }
   },
   {
-    "prompt": "Before midnight, investigate veil: it is sparking.",
+    "prompt": "New incident from the building: The fan controller has crashed; the GPU rack is getting hot.",
     "expected": {
-      "action": "ground",
-      "zone": "crypt"
+      "action": "restart_fans",
+      "equipment": "gpu_rack"
     }
   },
   {
-    "prompt": "Visual fault report from the old wing: sparking at veil.",
+    "prompt": "What should the controller do? The fan controller has crashed; the GPU rack is getting hot.",
     "expected": {
-      "action": "ground",
-      "zone": "crypt"
+      "action": "restart_fans",
+      "equipment": "gpu_rack"
     }
   },
   {
-    "prompt": "Caretaker, the camera detected leaking at thorn.",
+    "prompt": "Caretaker, choose the next repair. Coolant is leaking from the cooling loop onto the floor.",
     "expected": {
-      "action": "drain",
-      "zone": "west"
+      "action": "stop_pump",
+      "equipment": "cooling_loop"
     }
   },
   {
-    "prompt": "Before midnight, investigate thorn: it is leaking.",
+    "prompt": "New incident from the building: Coolant is leaking from the cooling loop onto the floor.",
     "expected": {
-      "action": "drain",
-      "zone": "west"
+      "action": "stop_pump",
+      "equipment": "cooling_loop"
     }
   },
   {
-    "prompt": "Visual fault report from the old wing: leaking at thorn.",
+    "prompt": "What should the controller do? Coolant is leaking from the cooling loop onto the floor.",
     "expected": {
-      "action": "drain",
-      "zone": "west"
+      "action": "stop_pump",
+      "equipment": "cooling_loop"
     }
   },
   {
-    "prompt": "Caretaker, the camera detected leaking at cinder.",
+    "prompt": "Caretaker, choose the next repair. The cooling pipe has split and the pump is still pushing liquid out.",
     "expected": {
-      "action": "drain",
-      "zone": "east"
+      "action": "stop_pump",
+      "equipment": "cooling_loop"
     }
   },
   {
-    "prompt": "Before midnight, investigate cinder: it is leaking.",
+    "prompt": "New incident from the building: The cooling pipe has split and the pump is still pushing liquid out.",
     "expected": {
-      "action": "drain",
-      "zone": "east"
+      "action": "stop_pump",
+      "equipment": "cooling_loop"
     }
   },
   {
-    "prompt": "Visual fault report from the old wing: leaking at cinder.",
+    "prompt": "What should the controller do? The cooling pipe has split and the pump is still pushing liquid out.",
     "expected": {
-      "action": "drain",
-      "zone": "east"
+      "action": "stop_pump",
+      "equipment": "cooling_loop"
     }
   },
   {
-    "prompt": "Caretaker, the camera detected leaking at veil.",
+    "prompt": "Caretaker, choose the next repair. There is a puddle under the cooling loop and coolant is dripping.",
     "expected": {
-      "action": "drain",
-      "zone": "crypt"
+      "action": "stop_pump",
+      "equipment": "cooling_loop"
     }
   },
   {
-    "prompt": "Before midnight, investigate veil: it is leaking.",
+    "prompt": "New incident from the building: There is a puddle under the cooling loop and coolant is dripping.",
     "expected": {
-      "action": "drain",
-      "zone": "crypt"
+      "action": "stop_pump",
+      "equipment": "cooling_loop"
     }
   },
   {
-    "prompt": "Visual fault report from the old wing: leaking at veil.",
+    "prompt": "What should the controller do? There is a puddle under the cooling loop and coolant is dripping.",
     "expected": {
-      "action": "drain",
-      "zone": "crypt"
+      "action": "stop_pump",
+      "equipment": "cooling_loop"
     }
   },
   {
-    "prompt": "Caretaker, the camera detected locked at thorn.",
+    "prompt": "Caretaker, choose the next repair. The exit door latch is stuck in the locked position.",
     "expected": {
-      "action": "unlock",
-      "zone": "west"
+      "action": "release_latch",
+      "equipment": "exit_door"
     }
   },
   {
-    "prompt": "Before midnight, investigate thorn: it is locked.",
+    "prompt": "New incident from the building: The exit door latch is stuck in the locked position.",
     "expected": {
-      "action": "unlock",
-      "zone": "west"
+      "action": "release_latch",
+      "equipment": "exit_door"
     }
   },
   {
-    "prompt": "Visual fault report from the old wing: locked at thorn.",
+    "prompt": "What should the controller do? The exit door latch is stuck in the locked position.",
     "expected": {
-      "action": "unlock",
-      "zone": "west"
+      "action": "release_latch",
+      "equipment": "exit_door"
     }
   },
   {
-    "prompt": "Caretaker, the camera detected locked at cinder.",
+    "prompt": "Caretaker, choose the next repair. The exit door will not open; its latch is still engaged.",
     "expected": {
-      "action": "unlock",
-      "zone": "east"
+      "action": "release_latch",
+      "equipment": "exit_door"
     }
   },
   {
-    "prompt": "Before midnight, investigate cinder: it is locked.",
+    "prompt": "New incident from the building: The exit door will not open; its latch is still engaged.",
     "expected": {
-      "action": "unlock",
-      "zone": "east"
+      "action": "release_latch",
+      "equipment": "exit_door"
     }
   },
   {
-    "prompt": "Visual fault report from the old wing: locked at cinder.",
+    "prompt": "What should the controller do? The exit door will not open; its latch is still engaged.",
     "expected": {
-      "action": "unlock",
-      "zone": "east"
+      "action": "release_latch",
+      "equipment": "exit_door"
     }
   },
   {
-    "prompt": "Caretaker, the camera detected locked at veil.",
+    "prompt": "Caretaker, choose the next repair. The emergency exit is blocked by a stuck door latch.",
     "expected": {
-      "action": "unlock",
-      "zone": "crypt"
+      "action": "release_latch",
+      "equipment": "exit_door"
     }
   },
   {
-    "prompt": "Before midnight, investigate veil: it is locked.",
+    "prompt": "New incident from the building: The emergency exit is blocked by a stuck door latch.",
     "expected": {
-      "action": "unlock",
-      "zone": "crypt"
+      "action": "release_latch",
+      "equipment": "exit_door"
     }
   },
   {
-    "prompt": "Visual fault report from the old wing: locked at veil.",
+    "prompt": "What should the controller do? The emergency exit is blocked by a stuck door latch.",
     "expected": {
-      "action": "unlock",
-      "zone": "crypt"
+      "action": "release_latch",
+      "equipment": "exit_door"
     }
   }
 ]

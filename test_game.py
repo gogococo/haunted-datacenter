@@ -158,12 +158,32 @@ class FlowTests(unittest.TestCase):
   self.post('check',{'kind':'guard','source':content.RUNBOOK_SOLUTION});server.STATE['training']['started']-=20;self.post('deploy')
   with self.assertRaises(urllib.error.HTTPError):self.post('evaluate')
   self.assertFalse(server.STATE['rooms'][1])
-  # Room 3 sequence checks use a completed caretaker fixture; real NOC gates
-  # and fresh vision/text assessment are covered in test_caretaker.py.
+  # Old authorization and sequence routes cannot unlock the generator room.
+  with self.assertRaises(urllib.error.HTTPError):self.post('escape',{'sequence':['ground:west','drain:east','unlock:crypt']})
+  board={'13':{'kind':'elbow','rotation':3},'7':{'kind':'elbow','rotation':1},'8':{'kind':'straight','rotation':1},'9':{'kind':'elbow','rotation':2},'21':{'kind':'elbow','rotation':0},'22':{'kind':'straight','rotation':1}}
+  settings={'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'}
+  self.assertTrue(self.post('plant/test',{'pipes':board,'settings':settings})['state']['plant']['report']['passed'])
+  with self.assertRaises(urllib.error.HTTPError):self.post('plant/escape',{'pipes':board,'settings':settings})
+  # A completed caretaker fixture isolates Room 3. Real NOC gates have separate tests.
   server.STATE['rooms'][1]=True
-  with self.assertRaises(urllib.error.HTTPError) as caught:self.post('escape',{'sequence':['unlock:crypt','drain:east','ground:west']})
-  for spoiler in ('ground','west','drain','east','unlock','crypt'):self.assertNotIn(spoiler,caught.exception.game_error)
-  r=self.post('escape',{'sequence':['ground:west','drain:east','unlock:crypt']});self.assertTrue(r['state']['escaped']);self.assertTrue(all(r['state']['rooms']))
+  r=self.post('plant/escape',{'pipes':board,'settings':settings});self.assertTrue(r['state']['escaped']);self.assertTrue(all(r['state']['rooms']))
+ def test_invalid_controller_settings_do_not_partially_change_board(self):
+  with self.assertRaises(urllib.error.HTTPError):self.post('plant/test',{'pipes':{'13':{'kind':'elbow','rotation':3}},'settings':{'fan_profile':'unknown'}})
+  self.assertEqual(server.STATE['plant']['pipes'],{})
+ def test_exit_rejects_changed_layout_and_settings_after_a_pass(self):
+  import copy
+  from test_plant import SOLUTION
+  server.STATE['rooms']=[True,True,False]
+  settings={'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'}
+  self.post('plant/test',{'pipes':SOLUTION,'settings':settings})
+  changed=copy.deepcopy(SOLUTION);changed['13']['rotation']=0
+  for board,values in [(changed,settings),(SOLUTION,{**settings,'alarms':'mute'})]:
+   with self.assertRaises(urllib.error.HTTPError):self.post('plant/escape',{'pipes':board,'settings':values})
+  self.assertFalse(server.STATE['escaped'])
+ def test_editing_dataset_invalidates_previous_caretaker_pass(self):
+  server.STATE['rooms']=[True,True,True];server.STATE['escaped']=True;server.STATE['noc']['report']={'passed':True}
+  self.post('dataset',{'source':content.starter_records()})
+  self.assertEqual(server.STATE['rooms'],[True,False,False]);self.assertFalse(server.STATE['escaped']);self.assertIsNone(server.STATE['noc']['report'])
  def test_live_rejects_fixtures(self):
   self.post('host',{'action':'live'})
   with self.assertRaises(urllib.error.HTTPError):self.post('search',{'archived':True})

@@ -1,0 +1,43 @@
+{
+  "model": "Qwen/Qwen3-0.6B",
+  "job_id": "ftjob-5869ee74d915444198712fa6f1ceb41e",
+  "started": 1792784849,
+  "finished": 1792785374,
+  "elapsed_seconds": 525,
+  "events": [
+    {
+      "created_at": 1792784849,
+      "message": "[API receipt] Job submitted: Qwen/Qwen3-0.6B \u00b7 LoRA rank 16 \u00b7 72 training / 18 validation phrasings."
+    },
+    {
+      "created_at": 1792784852,
+      "level": "info",
+      "message": "Job is submitted"
+    },
+    {
+      "created_at": 1792784895,
+      "level": "info",
+      "message": "Dataset 'training' processed successfully"
+    },
+    {
+      "created_at": 1792784944,
+      "level": "info",
+      "message": "Dataset 'validation' processed successfully"
+    },
+    {
+      "created_at": 1792785086,
+      "level": "info",
+      "message": "Training started"
+    },
+    {
+      "created_at": 1792785298,
+      "level": "info",
+      "message": "Training completed successfully"
+    },
+    {
+      "created_at": 1792785374,
+      "message": "[API receipt] Job succeeded. 10/10 epochs. Final validation loss: 0.0006435922114178538"
+    }
+  ],
+  "recorded": true
+}

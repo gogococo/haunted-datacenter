@@ -5,3 +5,6 @@ __pycache__/
 endpoint.json
 data/train.jsonl
 data/validation.jsonl
+
+models/
+.venv/

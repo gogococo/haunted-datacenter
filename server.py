@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 import content
 import caretaker, copy
-import switchboard,clue_post
+import switchboard,clue_post,plant
 
 ROOT=Path(__file__).resolve().parent
 RUNTIME=ROOT/'.runtime'; RUNTIME.mkdir(exist_ok=True)
@@ -14,13 +14,16 @@ TOKEN=secrets.token_urlsafe(24)
 LOCK=threading.RLock()
 
 def fresh():
-    return {'noc':caretaker.initial(),'puzzle_version':switchboard.VERSION,'board':switchboard.initial(),'created_at':time.time(),'mode':'rehearsal','started':None,'paused':False,'pause_at':None,'pause_total':0,'evidence':None,'calibration':False,'rooms':[False,False,False],'guard':False,'training':None,'endpoint':False,'baseline':None,'evaluation':None,'escaped':False,'hints':{'1':0,'2':0,'3':0},'sources':{'retry':content.RETRY_STARTER,'guard':content.RUNBOOK_STARTER,'dataset':content.starter_records()},'log':[{'text':'Incident SEV-0 opened. Previous on-call engineer: still assigned.','at':time.time()}]}
+    return {'plant':plant.initial(),'noc':caretaker.initial(),'puzzle_version':switchboard.VERSION,'board':switchboard.initial(),'created_at':time.time(),'mode':'rehearsal','started':None,'paused':False,'pause_at':None,'pause_total':0,'evidence':None,'calibration':False,'rooms':[False,False,False],'guard':False,'training':None,'endpoint':False,'baseline':None,'evaluation':None,'escaped':False,'hints':{'1':0,'2':0,'3':0},'sources':{'retry':content.RETRY_STARTER,'guard':content.RUNBOOK_STARTER,'dataset':content.starter_records()},'log':[{'text':'Incident SEV-0 opened. Previous on-call engineer: still assigned.','at':time.time()}]}
 try: STATE=json.loads((RUNTIME/'state.json').read_text())
 except (OSError,ValueError): STATE=fresh()
 if STATE.get('puzzle_version')!=switchboard.VERSION:
     (RUNTIME/'before-switchboard-state.json').write_text(json.dumps(STATE))
     old_mode=STATE.get('mode','rehearsal');STATE=fresh();STATE['mode']=old_mode
     (RUNTIME/'state.json').write_text(json.dumps(STATE))
+
+if STATE.get('plant',{}).get('version')!=plant.VERSION: STATE['plant']=plant.initial()
+if (STATE['plant'].get('operation') or {}).get('status')=='running': STATE['plant']['operation'].update(status='interrupted',message='Diagnostic request interrupted. Ask again when ready.')
 
 if STATE.get('noc',{}).get('version')!=caretaker.VERSION:
     (RUNTIME/('before-noc-upgrade-'+str(int(time.time()))+'.json')).write_text(json.dumps(STATE))
@@ -57,17 +60,17 @@ def view():
         STATE['board']=switchboard.initial();save()
     if STATE['training'] and STATE['training']['status']=='running' and time.time()-STATE['training']['started']>=16:
         STATE['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**STATE,'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**STATE,'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=STATE['noc']
     if (noc.get('operation') or {}).get('status')=='running':raise ValueError('The caretaker is already working. Wait for the current operation.')
     snapshot=copy.deepcopy(noc);source=STATE['sources']['dataset'];session=STATE['created_at']
-    if action in ('test','train','deploy'):
+    if action in ('test','train','deploy','backup','prompt-profile'):
         snapshot['previous_report']=snapshot.get('report');snapshot['report']=None;snapshot.pop('final',None)
     if action=='final':snapshot.pop('final',None)
     noc['operation']={'action':action,'status':'running','message':'Contacting Token Factory…','started':time.time()};noc['revision']+=1
-    if action in ('test','train','deploy','final'):
+    if action in ('test','train','deploy','backup','prompt-profile','final'):
         STATE['rooms'][1]=False;STATE['rooms'][2]=False;STATE['escaped']=False
     def progress(message):
         with LOCK:
@@ -89,6 +92,18 @@ def launch_noc(action,body):
     threading.Thread(target=worker,daemon=True).start()
 
 
+def launch_plant_advice(values):
+    current=STATE['plant'];session=STATE['created_at']
+    if (current.get('operation') or {}).get('status')=='running':raise ValueError('The diagnostic model is already reading the logs.')
+    settings=plant.settings(values);current['operation']={'status':'running','message':'Token Factory is reading the controller logs…'};current['revision']+=1
+    def worker():
+        try:reply=plant.advise(settings);status='succeeded';message='Real Token Factory diagnostic reply received.'
+        except Exception as error:reply=None;status='failed';message=str(error) if isinstance(error,ValueError) else 'Diagnostic request failed. Check the local server and try again.'
+        with LOCK:
+            if STATE['created_at']!=session:return
+            STATE['plant']['operation']={'status':status,'message':message};STATE['plant']['advice']=reply;STATE['plant']['revision']+=1;save()
+    threading.Thread(target=worker,daemon=True).start()
+
 def run_code(kind,source):
     if len(source)>20000: raise ValueError('Puzzle source is too long.')
     path=RUNTIME/f'{kind}.py'; path.write_text(source)
@@ -105,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/state':
             with LOCK: self.json(view())
             return
-        files={'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
+        files={'/training-replay.json':('web/training-replay.json','application/json'),'/plant.js':('web/plant.js','text/javascript'),'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
         if path not in files: self.send_error(404); return
         file,mime=files[path]; data=(ROOT/file).read_bytes()
         self.send_response(200);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(data)));self.send_header('X-Content-Type-Options','nosniff');self.end_headers();self.wfile.write(data)
@@ -188,6 +203,23 @@ class Handler(BaseHTTPRequestHandler):
             STATE['terminal_history']=(STATE.get('terminal_history',[])+[{'command':command.strip(),'output':output}])[-20:]
             refresh_switchboard()
             return {'output':output}
+        elif path.startswith('/api/plant/'):
+            action=path.rsplit('/',1)[1];p=STATE['plant']
+            if action=='advice':launch_plant_advice(b.get('settings',p['settings']))
+            elif action in ('pipes','test'):
+                board=plant.normalize(b.get('pipes',{}));report=plant.check_pipes(board)
+                values=plant.settings(b.get('settings',p['settings'])) if action=='test' else None
+                p['pipes']=board;p['pipe_report']=report;p['report']=None
+                STATE['rooms'][2]=False;STATE['escaped']=False
+                if action=='test':
+                    p['settings']=values;p['report']=plant.test_controller(board,values)
+                p['revision']+=1
+            elif action=='escape':
+                board=plant.normalize(b.get('pipes',{}));report=p.get('report') or {}
+                if not STATE['rooms'][0] or not STATE['rooms'][1]:raise ValueError('Restore communications and pass the caretaker’s live assessment before releasing the exit.')
+                if not report.get('passed') or report.get('board_hash')!=plant.fingerprint(board) or b.get('settings')!=report.get('settings') or not plant.check_pipes(board)['passed']:raise ValueError('Seal the cooling loop and pass a health check with this layout and configuration first.')
+                STATE['rooms'][2]=True;STATE['escaped']=True;STATE['finished']=time.time();event('Cooling stable. Backup generator on standby. Emergency exit released.')
+            else:raise ValueError('Unknown generator-room action.')
         elif path.startswith('/api/noc/'):
             action=path.rsplit('/',1)[1]
             if action=='playtest':
@@ -195,6 +227,7 @@ class Handler(BaseHTTPRequestHandler):
                 STATE['started']=time.time();STATE['paused']=False;STATE['pause_at']=None;STATE['pause_total']=0;STATE.pop('finished',None)
             elif action=='settings':
                 if (STATE['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the current operation before changing settings.')
+                if STATE['noc'].get('runner') and STATE['noc'].get('route')!='prompt' and b.get('base_model',STATE['noc']['runner']['model'])!=STATE['noc']['runner']['model']:raise ValueError('This local backup uses '+STATE['noc']['runner']['model']+'. Load a different checkpoint to change its base model.')
                 STATE['noc']['config']=caretaker.settings(b,STATE['noc']['config']);STATE['noc']['report']=None;STATE['noc'].pop('final',None);STATE['rooms'][1]=False;STATE['rooms'][2]=False;STATE['escaped']=False;STATE['noc']['revision']+=1
             elif action=='review':
                 if (STATE['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the camera inspection to finish.')
@@ -203,7 +236,7 @@ class Handler(BaseHTTPRequestHandler):
                 equipment=str(b.get('equipment','')).strip().lower();fault=str(b.get('fault','')).strip().lower()
                 request=caretaker.camera_request(equipment,fault)
                 observation.update(equipment=equipment,fault=fault,request=request,reviewed=True);STATE['noc']['revision']+=1
-            elif action in ('connect','vision','probe','test','train','refresh','deploy','final'):
+            elif action in ('connect','vision','probe','test','train','refresh','deploy','backup','prompt-profile','final'):
                 if not STATE['rooms'][0] and not STATE['noc'].get('playtest') and action not in ('connect','refresh'):raise ValueError('Restore Room 1 before running the caretaker. You can explore this room first.')
                 launch_noc(action,b)
             else:raise ValueError('Unknown caretaker action.')
@@ -232,6 +265,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path=='/api/dataset':
             if (STATE['noc'].get('operation') or {}).get('status')=='running': raise ValueError('Wait for the current caretaker operation before editing training records.')
             STATE['sources']['dataset']=b['source'];rows,errors=content.validate_seed(b['source'])
+            STATE['noc']['report']=None;STATE['noc'].pop('final',None);STATE['rooms'][1]=False;STATE['rooms'][2]=False;STATE['escaped']=False
             STATE['noc']['dataset_report']={'passed':not errors,'errors':errors};STATE['noc']['revision']+=1
             return {'report':{'passed':not errors,'errors':errors,'valid':len(rows),'total':9}}
         elif path=='/api/baseline':
@@ -255,9 +289,7 @@ class Handler(BaseHTTPRequestHandler):
             if not STATE['endpoint']: raise ValueError('Rehearse deployment before evaluation.')
             STATE['evaluation']={'score':27,'total':27,'label':'Scripted example; no model inference'};STATE['rooms'][1]=True;event('REHEARSAL: illustrative evaluation 27/27. Caretaker restored.')
         elif path=='/api/escape':
-            if not STATE['rooms'][0] or not STATE['rooms'][1] or not STATE['guard']: raise ValueError('Restore the archive, pass caretaker evaluation, and repair the guard first.')
-            if b.get('sequence')!=['ground:west','drain:east','unlock:crypt']: raise ValueError('The interlock rejected that sequence. Nothing moved. Compare the order with the signed instructions and try again.')
-            STATE['rooms'][2]=True;STATE['escaped']=True;STATE['finished']=time.time();event('EXIT 200 OK. All humans released. Alarms remain ON. Ghosts retained for observability.')
+            raise ValueError('Use the generator room: connect the cooling pipes, pass the controller health check, then release the exit.')
         else: raise ValueError('Unknown action.')
     def log_message(self,fmt,*args): pass
 

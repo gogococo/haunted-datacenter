@@ -1,0 +1,122 @@
+{
+  "scope": "27 new phrasings of nine known reports; local greedy decoding at 64 tokens. Not a reliability guarantee or unseen-intent benchmark. Only the Qwen3-0.6B trained checkpoint was available for inference.",
+  "models": [
+    {
+      "model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "id": "ftjob-f84b103ed34b40a39b567deccaba7062",
+      "status": "succeeded",
+      "elapsed_seconds": 513,
+      "checkpoint_metrics": {
+        "train_loss": 1.1489354372024536,
+        "valid_loss": 0.0011660846648737788
+      },
+      "baseline": {
+        "model": "Qwen/Qwen2.5-0.5B-Instruct",
+        "phase": "baseline",
+        "device": "mps",
+        "temperature": 0,
+        "max_tokens": 64,
+        "load_and_test_seconds": 7.43,
+        "correct": 0,
+        "total": 27,
+        "structured": 0,
+        "mean_reply_seconds": 0.243
+      },
+      "prompt": {
+        "model": "Qwen/Qwen2.5-0.5B-Instruct",
+        "phase": "prompt",
+        "device": "mps",
+        "temperature": 0,
+        "max_tokens": 64,
+        "load_and_test_seconds": 5.06,
+        "correct": 14,
+        "total": 27,
+        "structured": 27,
+        "mean_reply_seconds": 0.143
+      },
+      "weight_access": "API download returned HTTP 403; trained inference not evaluated"
+    },
+    {
+      "model": "Qwen/Qwen3-0.6B",
+      "id": "ftjob-5869ee74d915444198712fa6f1ceb41e",
+      "status": "succeeded",
+      "elapsed_seconds": 525,
+      "checkpoint_metrics": {
+        "train_loss": 1.7817833423614502,
+        "valid_loss": 0.0006435922114178538
+      },
+      "baseline": {
+        "model": "Qwen/Qwen3-0.6B",
+        "phase": "baseline",
+        "device": "mps",
+        "temperature": 0,
+        "max_tokens": 64,
+        "load_and_test_seconds": 7.76,
+        "correct": 0,
+        "total": 27,
+        "structured": 27,
+        "mean_reply_seconds": 0.229
+      },
+      "prompt": {
+        "model": "Qwen/Qwen3-0.6B",
+        "phase": "prompt",
+        "device": "mps",
+        "temperature": 0,
+        "max_tokens": 64,
+        "load_and_test_seconds": 6.07,
+        "correct": 17,
+        "total": 27,
+        "structured": 27,
+        "mean_reply_seconds": 0.165
+      },
+      "finetuned": {
+        "model": "Qwen/Qwen3-0.6B",
+        "phase": "finetuned",
+        "device": "mps",
+        "temperature": 0,
+        "max_tokens": 64,
+        "load_and_test_seconds": 7.15,
+        "correct": 27,
+        "total": 27,
+        "structured": 27,
+        "mean_reply_seconds": 0.206
+      },
+      "weight_access": "Dashboard download verified and evaluated locally"
+    },
+    {
+      "model": "Qwen/Qwen3-1.7B",
+      "id": "ftjob-f84af7509c08406fb77091515c6d4e84",
+      "status": "succeeded",
+      "elapsed_seconds": 538,
+      "checkpoint_metrics": {
+        "train_loss": 1.8808211088180542,
+        "valid_loss": 0.02815413475036621
+      },
+      "baseline": {
+        "model": "Qwen/Qwen3-1.7B",
+        "phase": "baseline",
+        "device": "mps",
+        "temperature": 0,
+        "max_tokens": 64,
+        "load_and_test_seconds": 14.05,
+        "correct": 0,
+        "total": 27,
+        "structured": 27,
+        "mean_reply_seconds": 0.36
+      },
+      "prompt": {
+        "model": "Qwen/Qwen3-1.7B",
+        "phase": "prompt",
+        "device": "mps",
+        "temperature": 0,
+        "max_tokens": 64,
+        "load_and_test_seconds": 13.2,
+        "correct": 19,
+        "total": 27,
+        "structured": 27,
+        "mean_reply_seconds": 0.343
+      },
+      "weight_access": "API download returned HTTP 403; trained inference not evaluated"
+    }
+  ]
+}
