@@ -3,12 +3,12 @@ import hashlib,json,time
 COLS,ROWS=6,5
 PORTS={'straight':(0,2),'elbow':(0,1)}
 INVENTORY={'straight':2,'elbow':4}
-ANCHORS={12:{'kind':'straight','rotation':1,'role':'inlet'},15:{'kind':'straight','rotation':0,'role':'rack'},23:{'kind':'straight','rotation':1,'role':'outlet'}}
-BLOCKED={14,16,19,20}
+ANCHORS={13:{'kind':'straight','rotation':0,'role':'pump'},9:{'kind':'straight','rotation':1,'role':'gpu'},21:{'kind':'straight','rotation':1,'role':'exchanger'},20:{'kind':'straight','rotation':1,'role':'reservoir'}}
+BLOCKED={14,15}
 DEFAULT_SETTINGS={'fan_profile':'quiet','pump_mode':'off','alarms':'keep'}
-VERSION='plant-v1'
+VERSION='plant-v2'
 
-def initial():return {'version':VERSION,'revision':0,'pipes':{},'pipe_report':None,'settings':DEFAULT_SETTINGS.copy(),'report':None,'advice':None,'operation':None}
+def initial():return {'version':VERSION,'revision':0,'pipes':{},'pipe_report':None,'settings':DEFAULT_SETTINGS.copy(),'report':None,'advice':None,'operation':None,'endpoint':None,'health':None,'deployment_unknown':False}
 def definition():return {'cols':COLS,'rows':ROWS,'anchors':ANCHORS,'blocked':sorted(BLOCKED),'inventory':INVENTORY}
 def label(cell):return chr(65+cell%COLS)+str(cell//COLS+1)
 def ports(tile):return {(p+tile['rotation'])%4 for p in PORTS[tile['kind']]}
@@ -26,20 +26,24 @@ def normalize(board):
 
 def fingerprint(board):return hashlib.sha256(json.dumps(normalize(board),sort_keys=True).encode()).hexdigest()
 def check_pipes(board):
- board=normalize(board);tiles={**{int(k):v for k,v in board.items()},**ANCHORS};cell=12;incoming=3;path=[]
+ board=normalize(board);tiles={**{int(k):v for k,v in board.items()},**ANCHORS};cell=13;incoming=2;path=[]
  def fail(message,at):return {'passed':False,'path':path,'problem_cell':at,'message':message,'board_hash':fingerprint(board)}
  while True:
-  if cell in path:return fail('The coolant runs in a circle. Route it through the GPU rack and into RETURN.',cell)
+  if cell==13 and path:
+   if incoming!=2:return fail('Return coolant to the pump’s lower port.',cell)
+   if not set(ANCHORS).issubset(path):return fail('The circuit must visit the GPU, heat exchanger and reservoir before returning to the pump.',cell)
+   if set(tiles)!=set(path):return fail('A loose pipe is disconnected. Return spare pieces to the tray.',cell)
+   return {'passed':True,'path':path+[13],'hot_path':path[path.index(9):path.index(21)+1],
+           'message':'Pressure test passed. Pump → GPU → heat exchanger → reservoir → pump. A complete closed circuit.',
+           'board_hash':fingerprint(board)}
+  if cell in path:return fail('This loop bypasses the pump. Connect every component into one circuit.',cell)
   tile=tiles.get(cell)
-  if not tile:return fail('No pipe at '+label(cell)+'. Fill the gap before starting the pump.',cell)
+  if not tile:return fail('Gap at '+label(cell)+'. Coolant would escape here.',cell)
   path.append(cell);ends=ports(tile)
   if incoming not in ends:return fail('The connection at '+label(cell)+' faces the wrong way. Rotate that pipe.',cell)
   outgoing=next(p for p in ends if p!=incoming)
-  if cell==23 and outgoing==1:
-   if 15 not in path:return fail('Coolant reached RETURN without cooling the rack. Route through the GPU heat exchanger.',cell)
-   return {'passed':True,'path':path,'message':'Supply → GPU rack → return. The cooling loop is sealed.','board_hash':fingerprint(board)}
   row,col=divmod(cell,COLS);dr,dc=((-1,0),(0,1),(1,0),(0,-1))[outgoing];row+=dr;col+=dc
-  if not 0<=row<ROWS or not 0<=col<COLS:return fail('Open pipe at '+label(cell)+'. Coolant would spill outside the loop.',cell)
+  if not 0<=row<ROWS or not 0<=col<COLS:return fail('Open pipe at '+label(cell)+'. Return coolant to the pump.',cell)
   cell=row*COLS+col;incoming=(outgoing+2)%4
 
 def settings(values):

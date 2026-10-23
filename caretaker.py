@@ -3,9 +3,9 @@ No credential is serialized into game state. No simulated score unlocks this roo
 """
 import base64,copy,hashlib,json,math,os,re,time,urllib.parse,urllib.request
 from pathlib import Path
-import content,tokenfactory as tf
+import content,lessons,tokenfactory as tf
 ROOT=Path(__file__).resolve().parent
-VERSION='noc-v3'
+VERSION='noc-v4'
 CAMERAS=[
  {'id':'west','title':'Camera 01 · GPU rack','equipment':'gpu_rack','fault':'fan_failure','expected':{'action':'restart_fans','equipment':'gpu_rack'}},
  {'id':'east','title':'Camera 02 · Cooling loop','equipment':'cooling_loop','fault':'coolant_leak','expected':{'action':'stop_pump','equipment':'cooling_loop'}},
@@ -13,9 +13,14 @@ CAMERAS=[
 ]
 BASE='Qwen/Qwen3-30B-A3B-Instruct-2507'
 DEFAULT_PROMPT=content.SYSTEM
+LIVE_CASES=[
+ {'prompt':'The GPU rack is getting hotter and its cooling fans are no longer turning.','expected':{'action':'restart_fans','equipment':'gpu_rack'}},
+ {'prompt':'Liquid is escaping from the coolant pipe while the circulation pump keeps pushing more out.','expected':{'action':'stop_pump','equipment':'cooling_loop'}},
+ {'prompt':'The emergency door cannot swing open because its locking latch is jammed shut.','expected':{'action':'release_latch','equipment':'exit_door'}},
+]
 
 def initial():
- return {'version':VERSION,'revision':0,'route':'untrained','config':{'temperature':1.2,'max_tokens':256,'system':DEFAULT_PROMPT,'base_model':BASE,'vision_model':''},'connection':None,'runner':None,'observations':{},'job':None,'endpoint':None,'report':None,'baseline':None,'operation':None,'probe':None}
+ return {'version':VERSION,'revision':0,'route':'untrained','config':{'temperature':1.2,'max_tokens':256,'system':DEFAULT_PROMPT,'base_model':BASE,'vision_model':''},'connection':None,'runner':None,'observations':{},'job':None,'endpoint':None,'report':None,'baseline':None,'operation':None,'probe':None,'probes':{},'lessons':{},'maintenance':{},'demonstrations':{},'submission':None}
 
 def runner_call(path,payload=None):
  base=os.environ.get('CARETAKER_RUNNER_URL','http://127.0.0.1:8770').rstrip('/');u=urllib.parse.urlparse(base)
@@ -89,8 +94,11 @@ def vision(n,camera_id):
   text=r['output'].strip();text=re.sub(r'^```(?:json)?\s*|\s*```$','',text);parsed=json.loads(text)
   if set(parsed)!={'equipment','fault','observation'} or any(not isinstance(v,str) or not v.strip() or len(v)>700 for v in parsed.values()):raise ValueError()
   parsed['equipment']=parsed['equipment'].strip().lower();parsed['fault']=parsed['fault'].strip().lower()
-  request=camera_request(parsed['equipment'],parsed['fault'],allow_unknown=True)
+  camera_request(parsed['equipment'],parsed['fault'],allow_unknown=True)
+  request=camera_request(parsed['equipment'],parsed['fault'],allow_unknown=True)+' Visible evidence: '+parsed['observation']
  except (ValueError,TypeError):raise ValueError('The vision model did not return a readable camera report. Try inspection again or choose another vision model.')
+ n.get('probes',{}).pop(camera_id,None)
+ n.get('demonstrations',{}).pop(camera_id,None)
  n['observations'][camera_id]={**parsed,'request':request,'original_request':request,'reviewed':False,'camera':camera_id,'inference':r,'at':time.time()}
  return 'Camera inspected by '+model+'. Check its equipment and fault observations before asking the caretaker.'
 
@@ -110,9 +118,8 @@ def checks(response,expected):
 def assess(n,progress=lambda x:None):
  if not n['connection']:raise ValueError('Connect Token Factory at the deployment rack first.')
  results=[]
- # Three held-out phrasings, each independently sampled three times. The test
- # suite is kept separate from the 72 training / 18 validation examples.
- cases=[content.eval_cases()[i] for i in (0,12,24)]
+ # Genuinely different reports, not the training reports with new prefixes.
+ cases=LIVE_CASES
  for i,c in enumerate(cases):
   group=[]
   for repeat in range(3):
@@ -127,6 +134,7 @@ def assess(n,progress=lambda x:None):
  return 'Mac mini finished. '+('Behavior checks passed.' if report['passed'] else 'Some checks need attention. Inspect the actual replies.')
 
 def activate_backup(n,source):
+ require_submission(n,source)
  if not n.get('baseline'):raise ValueError('Run the Mac mini on the base model first so you can compare the trained backup.')
  recipe=content.recipe_hash(source);health=runner_call('/health')
  if health.get('recipe_hash')!=recipe:raise ValueError('The repaired examples do not match this backup’s training recipe.')
@@ -135,41 +143,48 @@ def activate_backup(n,source):
  checkpoints=tf.api('/v1/fine_tuning/jobs/'+urllib.parse.quote(health['job_id'],safe='')+'/checkpoints')['data']
  if not any(row['id']==health['checkpoint_id'] for row in checkpoints):raise ValueError('The backup checkpoint was not returned by this training job.')
  n['job']={**tf.safe_job(job),'restored':True,'recipe_hash':recipe};n['runner']={**health,'active':True};n['route']='finetuned';n['endpoint']=None;n['report']=None;n.pop('final',None)
- n['config']['base_model']=health['model']
+ n['config']['base_model']=health['model'];n['config']['system']=content.SYSTEM
  return 'Real Token Factory checkpoint restored. This training ran before the episode; the next tests use its learned adapter live.'
 
 def activate_prompt_route(n,source):
+ require_submission(n,source)
  if not n.get('baseline'):raise ValueError('Run the Mac mini baseline first, then compare the prompt profile.')
  rows,errors=content.validate_seed(source)
  if errors:raise ValueError('Repair the maintenance examples first.')
  examples='\n'.join(r['messages'][1]['content']+' → '+r['messages'][2]['content'] for r in [rows[0],rows[3],rows[6]])
- n['config']['system']=content.SYSTEM+'\nMaintenance checklist examples:\n'+examples
+ n['config']['system']=content.SYSTEM+' Use only these exact command pairs: restart_fans → gpu_rack; stop_pump → cooling_loop; release_latch → exit_door. A split cooling pipe belongs to cooling_loop. An emergency exit belongs to exit_door.\nMaintenance checklist examples:\n'+examples
+ if n.get('runner'):n['runner']['active']=False
  n['route']='prompt';n['prompt_model']=BASE;n['config']['base_model']=BASE;n['report']=None;n.pop('final',None)
  return 'Prompt comparison profile restored. This route uses real Token Factory inference and does not use fine-tuned weights.'
 
+def require_submission(n,source):
+ submission=n.get('submission') or {}
+ if not submission.get('id'):raise ValueError('Submit the real Token Factory training job at the desk first. You can compare prompting while it runs.')
+ if submission.get('pack_hash')!=lessons.packet_hash(n,source):raise ValueError('The submitted training job belongs to a different training pack.')
+
 def train(n,source,runtime):
- if n.get('training_submission_unknown'):raise ValueError('A previous training submission had an uncertain outcome. Check Token Factory before submitting another job.')
- if n.get('job') and n['job'].get('status') not in ('failed','cancelled'):raise ValueError('A training job already exists for this incident. Refresh its status; do not submit a duplicate.')
- if not n.get('baseline'):raise ValueError('Run the Mac mini once to record the baseline before training.')
- rows,errors=content.validate_seed(source)
- if errors:raise ValueError('Repair the binder first. '+errors[0])
- model=n['config']['base_model']
- if not any(t['name']==model for t in (n.get('connection') or {}).get('templates',[])):raise ValueError('Choose a training base model with a matching dedicated-endpoint template.')
- folder=runtime/'noc-training';counts=content.write_datasets(source,folder)
+ if n.get('training_submission_unknown'):raise ValueError('A training submission had an uncertain outcome. Check Token Factory before submitting another job.')
+ if n.get('submission'):raise ValueError('This incident already submitted a training job. Refresh its status instead of submitting a duplicate.')
+ if not n.get('baseline'):raise ValueError('Record the Mac mini baseline before training.')
+ folder=runtime/'noc-training';folder.mkdir(exist_ok=True)
+ counts=lessons.write_pack(n,source,folder)
+ model=(n.get('runner') or {}).get('model') or 'Qwen/Qwen3-0.6B'
  files={name:tf.upload(folder/(name+'.jsonl')) for name in ('train','validation')}
- payload={'model':model,'training_file':files['train'],'validation_file':files['validation'],'suffix':'haunted-caretaker','seed':42,'hyperparameters':{'n_epochs':3,'batch_size':16,'learning_rate':1e-5,'lora':False,'context_length':8192,'packing':True}}
- # A full tune avoids an undocumented adapter merge step for this first POC.
- n['training_files']=files
- n['training_submission_unknown']=True
+ payload={'model':model,'training_file':files['train'],'validation_file':files['validation'],'suffix':'haunted-rehearsals','seed':42,
+          'hyperparameters':{'n_epochs':10,'batch_size':16,'learning_rate':0.0002,'lora':True,'lora_r':16,'lora_alpha':32,'lora_dropout':0,'context_length':8192,'packing':True}}
+ n['training_submission_unknown']=True;n['training_files']=files
  try:job=tf.api('/v1/fine_tuning/jobs','POST',payload)
  except tf.TokenFactoryError as e:
   if e.status in (400,401,403,404,422):n['training_submission_unknown']=False
   raise
+ if not job.get('id'):raise ValueError('Training returned no job ID. Check Token Factory before retrying.')
  n['training_submission_unknown']=False
- n['job']={**tf.safe_job(job),'counts':counts,'dataset_hash':hashlib.sha256(source.encode()).hexdigest()};n['endpoint']=None;n['report']=None;n.pop('final',None)
- return 'Real training job submitted. Investigate Room 3 while it runs.'
+ n['submission']={**tf.safe_job(job),'counts':counts,'pack_hash':lessons.packet_hash(n,source)}
+ return 'Real LoRA training submitted. Your three demonstrations are in the uploaded pack. Compare prompting or explicitly load Alex’s earlier checkpoint while it runs.'
 
 def refresh_cloud(n):
+ if n.get('submission'):
+  job=tf.api('/v1/fine_tuning/jobs/'+urllib.parse.quote(n['submission']['id'],safe=''));n['submission'].update(tf.safe_job(job))
  if n.get('job'):
   job=tf.api('/v1/fine_tuning/jobs/'+urllib.parse.quote(n['job']['id'],safe=''));n['job'].update(tf.safe_job(job))
   if job['status']=='succeeded':n['checkpoints']=tf.api('/v1/fine_tuning/jobs/'+urllib.parse.quote(job['id'],safe='')+'/checkpoints')
@@ -201,6 +216,7 @@ def deploy(n,body):
  return 'Dedicated endpoint created. Refresh status until a replica is ready.'
 
 def final_assessment(n,progress=lambda x:None):
+ if not (n.get('submission') or {}).get('id'):raise ValueError('Submit a real training job before the final assessment, including the prompt alternative.')
  if not (n.get('report') or {}).get('passed'):raise ValueError('Pass the Mac mini behavior tests first.')
  if n.get('route')!='prompt':refresh_cloud(n)
  job=n.get('job') or {};ep=n.get('endpoint') or {};receipt=n.get('deployment_receipt') or {}
@@ -227,15 +243,19 @@ def final_assessment(n,progress=lambda x:None):
 
 def run(action,n,body,source,runtime,progress):
  if action=='connect':return connect(n)
+ if action=='evidence':
+  lessons.evidence(n,body.get('camera'));return 'Maintenance evidence added to the rehearsal.'
+ if action=='try-probe':return lessons.try_probe(n,body.get('camera'))
+ if action=='rehearse':return lessons.rehearse(n,body.get('camera'),body.get('repair'))
  if action=='inspect':
   if not n.get('connection'):connect(n)
   return vision(n,body.get('camera'))
  if action=='review-probe':
   camera=body.get('camera');o=n['observations'].get(camera)
   if not o:raise ValueError('Scan this camera first.')
-  o['request']=camera_request(o['equipment'],o['fault']);o['reviewed']=True
+  camera_request(o['equipment'],o['fault']);o['reviewed']=True
   expected=next(c['expected'] for c in CAMERAS if c['id']==camera)
-  reply=text_call(n,o['request']);n['probe']={'camera':camera,'request':o['request'],**reply,'checks':checks(reply,expected)}
+  reply=text_call(n,o['request']);n['probe']={'camera':camera,'request':o['request'],**reply,'checks':checks(reply,expected)};n.setdefault('probes',{})[camera]=copy.deepcopy(n['probe'])
   return 'Caretaker replied. Compare its repair with the camera fault.'
  if action=='vision':return vision(n,body.get('camera'))
  if action=='probe':
@@ -244,6 +264,7 @@ def run(action,n,body,source,runtime,progress):
   n['probe']={'camera':camera,'request':o['request'],**text_call(n,o['request'])};return 'The caretaker replied. Read its answer on the monitor.'
  if action=='test':return assess(n,progress)
  if action=='verify':
+  require_submission(n,source)
   assess(n,progress)
   if not n['report']['passed']:return 'The caretaker needs another adjustment. Check the Mac mini results.'
   return final_assessment(n,progress)
@@ -252,5 +273,7 @@ def run(action,n,body,source,runtime,progress):
  if action=='prompt-profile':return activate_prompt_route(n,source)
  if action=='refresh':return refresh_cloud(n)
  if action=='deploy':return deploy(n,body)
- if action=='final':return final_assessment(n,progress)
+ if action=='final':
+  require_submission(n,source)
+  return final_assessment(n,progress)
  raise ValueError('Unknown caretaker action.')

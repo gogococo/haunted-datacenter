@@ -1,23 +1,23 @@
 """Routing, resource limits, and recovery proof for the generator and caretaker."""
 import copy,itertools,json,unittest
 from unittest.mock import patch
-import plant,content,caretaker as c
+import plant,content,caretaker as c,lessons
 
-SOLUTION={'13':{'kind':'elbow','rotation':3},'7':{'kind':'elbow','rotation':1},'8':{'kind':'straight','rotation':1},'9':{'kind':'elbow','rotation':2},'21':{'kind':'elbow','rotation':0},'22':{'kind':'straight','rotation':1}}
+SOLUTION={'7':{'kind':'elbow','rotation':1},'8':{'kind':'straight','rotation':1},'10':{'kind':'elbow','rotation':2},'16':{'kind':'straight','rotation':0},'22':{'kind':'elbow','rotation':3},'19':{'kind':'elbow','rotation':0}}
 
 class PlantTests(unittest.TestCase):
  def test_route_visits_gpu_and_reaches_return(self):
   report=plant.check_pipes(SOLUTION)
-  self.assertTrue(report['passed']);self.assertEqual(report['path'],[12,13,7,8,9,15,21,22,23])
+  self.assertTrue(report['passed']);self.assertEqual(report['path'],[13,7,8,9,10,16,22,21,20,19,13])
  def test_each_gap_or_broken_elbow_prevents_flow(self):
   for key in SOLUTION:
    board=copy.deepcopy(SOLUTION);del board[key]
    self.assertFalse(plant.check_pipes(board)['passed'])
-  for key in ('13','7','9','21'):
+  for key in ('7','10','22','19'):
    board=copy.deepcopy(SOLUTION);board[key]['rotation']=(board[key]['rotation']+1)%4
    self.assertFalse(plant.check_pipes(board)['passed'])
  def test_fixed_parts_blocked_cells_and_extra_inventory_rejected(self):
-  for board in [{'12':{'kind':'straight','rotation':1}},{'14':{'kind':'elbow','rotation':0}},
+  for board in [{'13':{'kind':'straight','rotation':1}},{'14':{'kind':'elbow','rotation':0}},
                 {str(i):{'kind':'straight','rotation':1} for i in (0,1,2)},
                 {'1':{'kind':'elbow','rotation':True}}]:
    with self.subTest(board=board),self.assertRaises(ValueError):plant.normalize(board)
@@ -31,20 +31,22 @@ class PlantTests(unittest.TestCase):
   report=plant.test_controller({}, {'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'})
   self.assertFalse(report['passed']);self.assertFalse(report['checks']['circulation'])
  def test_health_report_identifies_layout(self):
-  board=copy.deepcopy(SOLUTION);board['13']['rotation']=0
+  board=copy.deepcopy(SOLUTION);board['7']['rotation']=0
   self.assertNotEqual(plant.fingerprint(SOLUTION),plant.fingerprint(board))
 
 class RecoveryTests(unittest.TestCase):
  def source(self):return '\n'.join(json.dumps(r) for r in content.clean_records())
  def health(self):return {'ready':True,'recipe_hash':content.recipe_hash(self.source()),'model':'Qwen/Qwen3-0.6B','job_id':'job','checkpoint_id':'checkpoint','training_file':'train','validation_file':'valid','artifact_hash':'hash'}
+ def prepare(self,n):
+  n['submission']={'id':'new-job','pack_hash':lessons.packet_hash(n,self.source())};return n
  def test_backup_requires_baseline_repaired_examples_and_completed_job(self):
-  n=c.initial()
+  n=self.prepare(c.initial())
   with self.assertRaisesRegex(ValueError,'base model first'):c.activate_backup(n,self.source())
   n['baseline']={'passed':False}
-  with self.assertRaisesRegex(ValueError,'Repair'):c.activate_backup(n,content.starter_records())
+  with self.assertRaisesRegex(ValueError,'different training pack'):c.activate_backup(n,content.starter_records())
   with patch.object(c,'runner_call',return_value=self.health()),patch.object(c.tf,'api',return_value={'status':'running'}),self.assertRaisesRegex(ValueError,'completed training job'):c.activate_backup(n,self.source())
  def test_valid_backup_uses_verified_checkpoint_and_live_adapter(self):
-  n=c.initial();n['baseline']={'passed':False};h=self.health()
+  n=self.prepare(c.initial());n['baseline']={'passed':False};h=self.health()
   job={'id':'job','status':'succeeded','model':h['model'],'training_file':'train','validation_file':'valid'}
   with patch.object(c,'runner_call',return_value=h),patch.object(c.tf,'api',side_effect=[job,{'data':[{'id':'checkpoint'}]}]):c.activate_backup(n,self.source())
   self.assertEqual(n['route'],'finetuned');self.assertTrue(n['runner']['active']);self.assertIsNone(n['report'])
@@ -52,11 +54,11 @@ class RecoveryTests(unittest.TestCase):
   with patch.object(c,'runner_call',return_value=reply) as call:c.text_call(n,'A fault')
   self.assertTrue(call.call_args.args[1]['use_adapter'])
  def test_prompt_comparison_is_explicitly_separate(self):
-  n=c.initial();n['baseline']={'passed':False};c.activate_prompt_route(n,self.source())
+  n=self.prepare(c.initial());n['baseline']={'passed':False};c.activate_prompt_route(n,self.source())
   self.assertEqual(n['route'],'prompt');self.assertIsNone(n['job'])
   with patch.object(c,'completion',return_value={}) as call:c.text_call(n,'A fault')
   self.assertEqual(call.call_args.args[0],c.BASE)
  def test_final_without_test_report_has_clear_error(self):
-  with self.assertRaisesRegex(ValueError,'Mac mini'):c.final_assessment(c.initial())
+  with self.assertRaisesRegex(ValueError,'training job'):c.final_assessment(c.initial())
 
 if __name__=='__main__':unittest.main()

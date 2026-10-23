@@ -76,7 +76,7 @@ def run_train(args):
     receipt_path=write('training-pending.json',receipt)
     receipt['training_file']=upload(train);write('training-pending.json',receipt)
     receipt['validation_file']=upload(valid);write('training-pending.json',receipt)
-    payload={'model':args.model,'training_file':receipt['training_file'],'validation_file':receipt['validation_file'],'suffix':'night-operator','seed':42,'hyperparameters':{'n_epochs':args.epochs,'batch_size':16,'learning_rate':args.learning_rate,'lora':True,'lora_r':16,'lora_alpha':16,'lora_dropout':0.05,'context_length':8192,'packing':True}}
+    payload={'model':args.model,'training_file':receipt['training_file'],'validation_file':receipt['validation_file'],'suffix':'night-operator','seed':42,'hyperparameters':{'n_epochs':args.epochs,'batch_size':16,'learning_rate':args.learning_rate,'lora':True,'lora_r':16,'lora_alpha':32,'lora_dropout':0,'context_length':8192,'packing':True}}
     job=api('/v1/fine_tuning/jobs','POST',payload)
     receipt.update({'job_id':job['id'],'status':job['status'],'request':payload});write('training-'+job['id']+'.json',receipt)
     return safe_job(job)

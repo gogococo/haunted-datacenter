@@ -1,5 +1,5 @@
 """Haunted switchboard rules: routing is simulated; web research is real."""
-VERSION='switchboard-v1'
+VERSION='switchboard-v2'
 BROKER_HOST='crypt.local'
 BROKER_IP='10.13.0.7'
 DOOR_TOPIC='midnight/door'
@@ -68,10 +68,11 @@ def terminal_command(state,command):
  if args==['status']:
   return '\n'.join(f'{label}: {"OK" if value else "WAITING"}' for label,value in [
    ('Ghost services',state.get('board',{}).get('ready')),('Protocol research',state.get('board_citation')),
-   ('Mabel’s post retrieved',state.get('topic_evidence')),('Wiring applied',state.get('switchboard_applied')),('Door message',state.get('door_signal'))])
+   ('Announcement subscription',state.get('subscription',{}).get('passed')),('Mabel’s post retrieved',state.get('topic_evidence')),('Wiring applied',state.get('switchboard_applied')),('Door message',state.get('door_signal'))])
  if args==['ghostctl','apply']:
   if not state.get('board',{}).get('ready'):return 'APPLY BLOCKED: fix the switchboard and send a successful test signal first.'
-  if not state.get('board_citation'):return 'APPLY BLOCKED: use Tavily on the old computer to find a reference for the topics/subscribers protocol.'
+  if not state.get('board_citation'):return 'APPLY BLOCKED: inspect a wildcard reference with Tavily on the old computer.'
+  if not state.get('subscription',{}).get('passed'):return 'APPLY BLOCKED: repair Mabel’s announcement subscription at the switchboard. Private mail must stay private.'
   state['switchboard_applied']=True
   return 'Wiring applied. Three ghost services online.\nMosquitto MQTT client ready. Publish OPEN to the topic in Mabel’s launch post. Type mosquitto_pub --help for the flags.'
  if args[0]=='mosquitto_pub':
@@ -90,3 +91,31 @@ def terminal_command(state,command):
   state['door_signal']=True
   return 'Mosquitto → '+flags['host']+' · Published OPEN → '+DOOR_TOPIC+'\nDoor: message received. CLICK.\nThe exit is unlocked. Alex: “See? Enterprise architecture.”'
  return 'Unknown command. Try help. This haunted terminal only understands the commands listed there.'
+
+ANNOUNCEMENTS=[
+ {'topic':'midnight/door/announcement','message':'Mabel: door maintenance starts at midnight.','wanted':True,'ghost':'mabel'},
+ {'topic':'midnight/cooling/announcement','message':'Pip: coolant delivery is on its way.','wanted':True,'ghost':'pip'},
+ {'topic':'midnight/mail/private','message':'Edgar’s private letter. Again.','wanted':False,'ghost':'edgar'},
+ {'topic':'midnight/cooling/debug/trace','message':'DEBUG: pump thinks it is a printer.','wanted':False,'ghost':'edgar'},
+ {'topic':'daylight/door/announcement','message':'Day shift rota. Nobody here is on it.','wanted':False,'ghost':'mabel'},
+ {'topic':'midnight/announcement','message':'Retired announcement channel. Please stop resurrecting it.','wanted':False,'ghost':'pip'},
+]
+
+def topic_matches(filter,topic):
+ if not isinstance(filter,str) or not filter or len(filter)>120 or '\x00' in filter:raise ValueError('Enter an MQTT subscription filter.')
+ parts=filter.split('/')
+ for i,part in enumerate(parts):
+  if ('#' in part and (part!='#' or i!=len(parts)-1)) or ('+' in part and part!='+'):raise ValueError('Wildcards occupy a whole topic level. # must be the last level.')
+ if topic.startswith('$') and parts[0] in ('+','#'):return False
+ levels=topic.split('/');j=0
+ for part in parts:
+  if part=='#':return True
+  if j>=len(levels) or part not in ('+',levels[j]):return False
+  j+=1
+ return j==len(levels)
+
+def test_subscription(filter):
+ filter=str(filter).strip();results=[{**x,'received':topic_matches(filter,x['topic'])} for x in ANNOUNCEMENTS]
+ passed=all(x['received']==x['wanted'] for x in results)
+ missed=sum(x['wanted'] and not x['received'] for x in results);noise=sum(not x['wanted'] and x['received'] for x in results)
+ return {'filter':filter,'passed':passed,'results':results,'message':'Only the midnight service announcements reach the speaker. Edgar: “An astonishingly basic improvement.”' if passed else f'{missed} announcement(s) missed. {noise} private, debug or off-shift message(s) broadcast. Edgar would like a word.'}

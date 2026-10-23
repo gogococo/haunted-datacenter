@@ -1,49 +1,26 @@
-SEV-0 — THE NIGHT SHIFT
-45-minute target · 2–3 people · one keyboard
+THE HAUNTED DATACENTER — 45-MINUTE TARGET
 
-READINESS
-The 45-minute flow below is a design target, not a validated cloud timetable.
-The current 30B full-tuning trial took 36m52s and its deployment needs beta
-custom-weight access. A smaller-model/local or Serverless AI route is under
-discussion. Do not promise that the current Room 2 can finish in 12 minutes.
-The earlier checkpoint used the retired dialect format; the revised camera
-inputs require a matching model and a measured inference rehearsal.
+Before the clock:
+- Tavily CLI authenticated; Token Factory key in server environment.
+- Prepared small-model checkpoint runner online; verify its source job.
+- Nebius CLI logged in; project/subnet selected; allow for CPU provisioning.
+- Start a fresh incident. A browser refresh alone preserves prior game progress.
 
-BEFORE THE STREAM
-Start with NEBIUS_API_KEY in the server environment and an authenticated tvly CLI.
-Publish the fictional Mabel article and set MABEL_POST_URL to its public HTTPS URL.
-Test Tavily Extract on that URL. Rehearsal drafts are explicitly marked.
-Verify the chosen training and inference route. No new hosting alternative has
-been implemented yet. Reset does not cancel jobs or delete endpoints.
+00–03 Welcome, accept the pager, read Alex’s note.
+03–14 Room 1: reconnect ghost services. Search MQTT wildcard docs with Tavily.
+      Explicitly inspect a source with Extract. Repair the speaker subscription.
+      Recover Mabel’s concrete door topic. Apply wiring and publish OPEN.
+14–30 Room 2: inspect all three camera images with real vision. Try the caretaker’s
+      replies in rehearsals. Read service stickers, demonstrate repairs, record lessons.
+      Inspect the dataset. Measure baseline. Submit the actual LoRA job.
+      Keep its status visible. Explicitly select an earlier completed checkpoint for
+      stream pacing, then compare. Prompting is a labeled alternative using a larger
+      public model. Explain the difference; never call prompting trained weights.
+30–42 Room 3: start the real Serverless CPU deployment first. Repair a closed coolant
+      circuit while resources start. Inspect logs. Test /healthz, then send sensor data.
+      Observe that app readiness and successful cooling are separate checks.
+42–45 Everyone celebrates: Pip, Edgar, Mabel and the caretaker. Discuss what was real.
 
-00–03 — ALEX'S HANDOFF
-Accept the pager. One player drives; the others interpret clues and suggest tests.
-
-03–12 — HAUNTED SWITCHBOARD
-Talk to ghosts, research protocols with Tavily, reconnect the crossed cables.
-Mabel has forgotten her topic. Fetch her launch post with Tavily Extract.
-Pip's successful DNS lookup gives the same broker host used by Mosquitto.
-At the server: ghostctl apply, then
-mosquitto_pub -h crypt.local -t midnight/door -m OPEN
-Explain -h (host), -t (exact topic), and -m (message). Broker traffic is simulated.
-
-12–24 — NOC DESK (TARGET)
-Use real vision inference to identify equipment and visible faults.
-Review the observations, then ask the caretaker to choose a repair.
-Run the Mac mini. Discuss brevity, truncation, format, correctness and repeats.
-Change one control at a time and inspect the actual responses.
-Repair the three binder labels; inspect the before/after JSONL preview.
-Fine-tuning remains the intended main path; prompting is an intentional comparison.
-The current assessment coverage is unchanged pending discussion.
-
-24–39 — GENERATOR ROOM (PROPOSAL, NOT BUILT)
-Fans, liquid cooling and backup power. Recover the controller and apply the
-caretaker's repair plan before the simulated system fails over.
-Choose between Token Factory inference plus a local simulator, or an optional
-Nebius Serverless AI controller endpoint after checking IAM, quotas and timing.
-The existing Room 3 is still the older runbook prototype.
-
-39–45 — EXIT AND DEBRIEF (TARGET)
-Review which work was search, extraction, inference, training and serving.
-Explain that lower temperature does not teach missing rules, and a small passing
-sample is not a general reliability guarantee. Review cloud resource cleanup.
+The new training job and the selected earlier checkpoint are separate resources.
+The cloud controller is real; its sensor data and the haunted hardware are simulated.
+A game reset does not cancel training or stop cloud endpoints. Manage those in the console.

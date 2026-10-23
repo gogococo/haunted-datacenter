@@ -2,7 +2,7 @@
 import copy,json,tempfile,threading,time,unittest
 from pathlib import Path
 from unittest.mock import patch
-import caretaker as c,content,server
+import caretaker as c,content,server,lessons
 
 def response(output='{"action":"restart_fans","equipment":"gpu_rack"}',finish='stop'):
  return {'output':output,'finish_reason':finish,'model':'test','request_id':'test','usage':{}}
@@ -13,12 +13,12 @@ class AssessmentTests(unittest.TestCase):
   with patch.object(c,'connect') as connect,patch.object(c,'vision') as vision:c.run('inspect',n,{'camera':'west'},'',Path('.'),lambda _:None)
   connect.assert_called_once_with(n);vision.assert_called_once_with(n,'west')
  def test_confirmation_uses_observed_fields_for_the_actual_probe(self):
-  n=c.initial();n['observations']['west']={'equipment':'cooling_loop','fault':'coolant_leak','reviewed':False}
+  n=c.initial();n['observations']['west']={'equipment':'cooling_loop','fault':'coolant_leak','reviewed':False,'request':'Equipment: Cooling loop. Observation: Coolant leaking.'}
   with patch.object(c,'text_call',return_value=response()) as call:c.run('review-probe',n,{'camera':'west'},'',Path('.'),lambda _:None)
   self.assertEqual(call.call_args.args[1],'Equipment: Cooling loop. Observation: Coolant leaking.')
   self.assertTrue(n['observations']['west']['reviewed']);self.assertIn('checks',n['probe'])
  def test_combined_verification_does_not_run_final_on_a_failed_behavior_check(self):
-  n=c.initial()
+  n=c.initial();n['submission']={'id':'job','pack_hash':lessons.packet_hash(n,'')}
   def assess(n,progress):n['report']={'passed':False}
   with patch.object(c,'assess',side_effect=assess),patch.object(c,'final_assessment') as final:c.run('verify',n,{},'',Path('.'),lambda _:None)
   final.assert_not_called()
@@ -60,7 +60,7 @@ class AssessmentTests(unittest.TestCase):
   with patch.object(c,'refresh_cloud'):
    with self.assertRaisesRegex(ValueError,'current endpoint and settings'):c.final_assessment(n)
  def ready(self):
-  n=c.initial();n['job']={'id':'job','status':'succeeded','model':'base'};n['endpoint']={'id':'ep','model_name':'base','custom_weights_id':'weights','routing_key':'dedicated/test','region':'eu-north1','enabled':True,'deployment':{'ready_replicas':1}}
+  n=c.initial();n['submission']={'id':'new-job'};n['job']={'id':'job','status':'succeeded','model':'base'};n['endpoint']={'id':'ep','model_name':'base','custom_weights_id':'weights','routing_key':'dedicated/test','region':'eu-north1','enabled':True,'deployment':{'ready_replicas':1}}
   n['deployment_receipt']={'job_id':'job','weights_id':'weights','endpoint_id':'ep'};n['report']={'passed':True,'endpoint_id':'ep','config':copy.deepcopy(n['config'])};return n
  def test_final_uses_fresh_vision_and_text_for_all_three_incidents(self):
   n=self.ready()
@@ -79,9 +79,9 @@ class AssessmentTests(unittest.TestCase):
  def test_observed_equipment_and_fault_determine_caretaker_input(self):
   n=c.initial();n['config']['vision_model']='vision'
   with patch.object(c,'completion',return_value=response('{"equipment":"cooling_loop","fault":"fan_failure","observation":"Fans stopped at the cooling loop"}')):c.vision(n,'west')
-  o=n['observations']['west'];self.assertEqual(o['request'],'Equipment: Cooling loop. Observation: Fans stopped / overheating.');o['reviewed']=True
+  o=n['observations']['west'];self.assertEqual(o['request'],'Equipment: Cooling loop. Observation: Fans stopped / overheating. Visible evidence: Fans stopped at the cooling loop');o['reviewed']=True
   with patch.object(c,'text_call',return_value=response()) as call:c.run('probe',n,{'camera':'west'},'',Path('.'),lambda x:None)
-  self.assertEqual(call.call_args.args[1],'Equipment: Cooling loop. Observation: Fans stopped / overheating.')
+  self.assertEqual(call.call_args.args[1],'Equipment: Cooling loop. Observation: Fans stopped / overheating. Visible evidence: Fans stopped at the cooling loop')
  def test_weight_mismatch_blocks_final(self):
   n=self.ready();n['endpoint']['custom_weights_id']='other'
   with patch.object(c,'refresh_cloud'),self.assertRaisesRegex(ValueError,'does not match'):c.final_assessment(n)
@@ -93,9 +93,10 @@ class CloudWorkflowTests(unittest.TestCase):
  def test_training_uploads_disjoint_data_and_uses_real_job_response(self):
   n=c.initial();n['baseline']={'passed':False};n['connection']={'templates':[{'name':c.BASE}]}
   source='\n'.join(json.dumps(r) for r in content.clean_records())
+  n['lessons']={key:{'input':'Observed '+key,'answer':{k:v[k] for k in ('action','equipment')}} for key,v in lessons.NOTES.items()}
   with tempfile.TemporaryDirectory() as tmp,patch.object(c.tf,'upload',side_effect=['train-id','valid-id']),patch.object(c.tf,'api',return_value={'id':'job-1','status':'queued','model':c.BASE}) as api:
    c.train(n,source,Path(tmp))
-   payload=api.call_args.args[2];self.assertEqual(payload['training_file'],'train-id');self.assertFalse(payload['hyperparameters']['lora']);self.assertEqual(n['job']['id'],'job-1')
+   payload=api.call_args.args[2];self.assertEqual(payload['training_file'],'train-id');self.assertTrue(payload['hyperparameters']['lora']);self.assertEqual(n['submission']['id'],'job-1')
    train={json.loads(x)['messages'][1]['content'] for x in (Path(tmp)/'noc-training/train.jsonl').read_text().splitlines()}
    valid={json.loads(x)['messages'][1]['content'] for x in (Path(tmp)/'noc-training/validation.jsonl').read_text().splitlines()}
    self.assertFalse(train&valid)

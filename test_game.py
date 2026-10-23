@@ -3,7 +3,7 @@ import json,tempfile,threading,unittest,urllib.request,urllib.error,itertools
 from pathlib import Path
 from unittest.mock import patch
 from http.server import ThreadingHTTPServer
-import content,server,tokenfactory,switchboard,clue_post
+import content,server,tokenfactory,switchboard,clue_post,plant
 
 CORRECT={'pip':'DNS','edgar':'SMTP','mabel':'MQTT'}
 
@@ -71,9 +71,19 @@ class FlowTests(unittest.TestCase):
    try:e.game_error=json.load(e).get('error','')
    finally:e.close()
    raise
+ def research(self):
+  result={'results':[{'title':'MQTT subscriptions','url':'https://mosquitto.org/man/mqtt-7.html','content':'MQTT wildcard subscriptions use + and #.'}]}
+  with patch.object(server.subprocess,'run',return_value=type('Result',(),{'returncode':0,'stdout':json.dumps(result)})()):r=self.post('search',{'query':'MQTT wildcard subscriptions'})
+  self.assertNotIn('board_citation',r['state'])
+  self.extract_source('https://mosquitto.org/man/mqtt-7.html')
+  return r
+ def extract_source(self,url):
+  result={'results':[{'url':url,'raw_content':'MQTT topic filters: + matches exactly one level; # matches any number of levels.'}]}
+  with patch.object(server.subprocess,'run',return_value=type('Result',(),{'returncode':0,'stdout':json.dumps(result)})()):return self.post('research/extract',{'url':url})
  def restore(self):
-  self.post('search',{'archived':True});self.post('switchboard/test',{'routes':CORRECT});self.open_terminal_door()
+  self.research();self.post('switchboard/test',{'routes':CORRECT});self.open_terminal_door()
  def open_terminal_door(self):
+  self.post('subscription/test',{'filter':'midnight/+/announcement'})
   self.post('mabel-post',{'archived':True})
   self.post('terminal',{'command':'ghostctl apply'});return self.post('terminal',{'command':'mosquitto_pub -h crypt.local -t midnight/door -m OPEN'})
  def test_token_required(self):
@@ -84,7 +94,7 @@ class FlowTests(unittest.TestCase):
   for order in [('search','switchboard/test'),('switchboard/test','search')]:
    server.STATE=server.fresh()
    for i,step in enumerate(order):
-    self.post(step,{'archived':True} if step=='search' else {'routes':CORRECT});self.assertFalse(server.STATE['rooms'][0])
+    self.research() if step=='search' else self.post(step,{'routes':CORRECT});self.assertFalse(server.STATE['rooms'][0])
    self.assertTrue(self.open_terminal_door()['state']['rooms'][0])
  def test_wrong_routes_relock_door_and_keep_reference(self):
   self.restore();r=self.post('switchboard/test',{'routes':{'pip':'SMTP','edgar':'MQTT','mabel':'DNS'}})
@@ -99,6 +109,7 @@ class FlowTests(unittest.TestCase):
   with patch.object(server.subprocess,'run',return_value=type('Result',(),{'returncode':0,'stdout':json.dumps(result)})()):
    r=self.post('search',{'query':'topic subscribers messaging protocol'})
    self.assertFalse(r['state']['rooms'][0]);self.assertEqual(r['state']['evidence'],'tavily')
+   self.extract_source(result['results'][0]['url'])
    self.assertTrue(self.open_terminal_door()['state']['rooms'][0])
  def test_dns_research_does_not_verify_subscriber_protocol(self):
   self.post('switchboard/test',{'routes':CORRECT})
@@ -110,28 +121,28 @@ class FlowTests(unittest.TestCase):
    with self.assertRaises(urllib.error.HTTPError):self.post('search',{'query':' '})
    run.assert_not_called()
  def test_retired_clock_and_code_routes_cannot_bypass_switchboard(self):
-  self.post('search',{'archived':True});self.post('calibrate',{'kind':'absolute','wait':'120'});self.post('check',{'kind':'retry','source':content.RETRY_SOLUTION})
+  self.research();self.post('calibrate',{'kind':'absolute','wait':'120'});self.post('check',{'kind':'retry','source':content.RETRY_SOLUTION})
   self.assertFalse(server.STATE['rooms'][0])
  def test_terminal_requires_test_research_and_apply(self):
   self.assertIn('BLOCKED',self.post('terminal',{'command':'ghostctl apply'})['output'])
   self.post('switchboard/test',{'routes':CORRECT})
   self.assertIn('Tavily',self.post('terminal',{'command':'ghostctl apply'})['output'])
-  self.post('search',{'archived':True})
+  self.research()
   self.assertIn('OFFLINE',self.post('terminal',{'command':'mosquitto_pub -h crypt.local -t midnight/door -m OPEN'})['output'])
   self.assertFalse(server.STATE['rooms'][0])
  def test_terminal_wrong_topic_payload_and_shell_input_are_safe(self):
-  self.post('search',{'archived':True});self.post('switchboard/test',{'routes':CORRECT});self.post('terminal',{'command':'ghostctl apply'})
+  self.research();self.post('subscription/test',{'filter':'midnight/+/announcement'});self.post('switchboard/test',{'routes':CORRECT});self.post('terminal',{'command':'ghostctl apply'})
   with patch.object(server.subprocess,'run') as run:
    for command in ['mosquitto_pub -h crypt.local -t wrong/topic -m OPEN','mosquitto_pub -h crypt.local -t midnight/door -m closed','ghostctl apply; touch /tmp/haunted','$(whoami)','mqtt publish "']:
     r=self.post('terminal',{'command':command});self.assertFalse(r['state']['rooms'][0]);self.assertTrue(r['output'])
    run.assert_not_called()
   self.assertTrue(self.open_terminal_door()['state']['rooms'][0])
  def test_guessed_topic_does_not_replace_tavily_retrieval(self):
-  self.post('search',{'archived':True});self.post('switchboard/test',{'routes':CORRECT});self.post('terminal',{'command':'ghostctl apply'})
+  self.research();self.post('subscription/test',{'filter':'midnight/+/announcement'});self.post('switchboard/test',{'routes':CORRECT});self.post('terminal',{'command':'ghostctl apply'})
   r=self.post('terminal',{'command':'mosquitto_pub -h crypt.local -t midnight/door -m OPEN'})
   self.assertIn('UNVERIFIED',r['output']);self.assertFalse(r['state']['rooms'][0])
  def test_mosquitto_host_flags_and_subscription_filters(self):
-  self.post('search',{'archived':True});self.post('mabel-post',{'archived':True});self.post('switchboard/test',{'routes':CORRECT});self.post('terminal',{'command':'ghostctl apply'})
+  self.research();self.post('mabel-post',{'archived':True});self.post('subscription/test',{'filter':'midnight/+/announcement'});self.post('switchboard/test',{'routes':CORRECT});self.post('terminal',{'command':'ghostctl apply'})
   for command in ['mosquitto_pub -h localhost -t midnight/door -m OPEN','mosquitto_pub -h crypt.local -t midnight/+ -m OPEN','mosquitto_pub -h crypt.local -h crypt.local -m OPEN']:
    self.assertFalse(self.post('terminal',{'command':command})['state']['rooms'][0])
   self.assertTrue(self.post('terminal',{'command':'mosquitto_pub --message OPEN --topic midnight/door --host 10.13.0.7'})['state']['rooms'][0])
@@ -172,34 +183,29 @@ class FlowTests(unittest.TestCase):
  def test_damaged_training_blocked(self):
   self.restore();self.post('baseline')
   with self.assertRaises(urllib.error.HTTPError):self.post('train',{'source':content.starter_records()})
- def test_full_rehearsal(self):
-  self.post('start');self.restore();self.post('baseline');self.post('train',{'source':'\n'.join(json.dumps(r) for r in content.clean_records())})
-  with self.assertRaises(urllib.error.HTTPError):self.post('deploy')
-  self.post('check',{'kind':'guard','source':content.RUNBOOK_SOLUTION});server.STATE['training']['started']-=20;self.post('deploy')
-  with self.assertRaises(urllib.error.HTTPError):self.post('evaluate')
-  self.assertFalse(server.STATE['rooms'][1])
-  # Old authorization and sequence routes cannot unlock the generator room.
+ def test_legacy_scripted_training_cannot_unlock_the_new_rooms(self):
+  self.restore();self.post('baseline');self.post('train',{'source':'\n'.join(json.dumps(r) for r in content.clean_records())})
+  self.assertFalse(server.STATE['rooms'][1]);self.assertFalse(server.STATE['rooms'][2])
   with self.assertRaises(urllib.error.HTTPError):self.post('escape',{'sequence':['ground:west','drain:east','unlock:crypt']})
-  board={'13':{'kind':'elbow','rotation':3},'7':{'kind':'elbow','rotation':1},'8':{'kind':'straight','rotation':1},'9':{'kind':'elbow','rotation':2},'21':{'kind':'elbow','rotation':0},'22':{'kind':'straight','rotation':1}}
-  settings={'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'}
-  self.assertTrue(self.post('plant/test',{'pipes':board,'settings':settings})['state']['plant']['report']['passed'])
-  with self.assertRaises(urllib.error.HTTPError):self.post('plant/escape',{'pipes':board,'settings':settings})
-  # A completed caretaker fixture isolates Room 3. Real NOC gates have separate tests.
-  server.STATE['rooms'][1]=True
-  r=self.post('plant/escape',{'pipes':board,'settings':settings});self.assertTrue(r['state']['escaped']);self.assertTrue(all(r['state']['rooms']))
- def test_invalid_controller_settings_do_not_partially_change_board(self):
-  with self.assertRaises(urllib.error.HTTPError):self.post('plant/test',{'pipes':{'13':{'kind':'elbow','rotation':3}},'settings':{'fan_profile':'unknown'}})
+ def test_invalid_board_does_not_partially_mutate_state(self):
+  server.STATE['rooms'][0]=True
+  with self.assertRaises(urllib.error.HTTPError):self.post('plant/test',{'pipes':{'13':{'kind':'elbow','rotation':3}}})
   self.assertEqual(server.STATE['plant']['pipes'],{})
- def test_exit_rejects_changed_layout_and_settings_after_a_pass(self):
-  import copy
+ def test_exit_requires_cloud_receipt_and_current_circuit(self):
   from test_plant import SOLUTION
-  server.STATE['rooms']=[True,True,False]
-  settings={'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'}
-  self.post('plant/test',{'pipes':SOLUTION,'settings':settings})
-  changed=copy.deepcopy(SOLUTION);changed['13']['rotation']=0
-  for board,values in [(changed,settings),(SOLUTION,{**settings,'alarms':'mute'})]:
-   with self.assertRaises(urllib.error.HTTPError):self.post('plant/escape',{'pipes':board,'settings':values})
-  self.assertFalse(server.STATE['escaped'])
+  server.STATE['rooms']=[True,True,False];p=server.STATE['plant'];values={'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'}
+  p['report']=plant.test_controller(SOLUTION,values)
+  with self.assertRaises(urllib.error.HTTPError):self.post('plant/escape',{'pipes':SOLUTION})
+  p['endpoint']={'id':'cloud-1'};p['report'].update(endpoint_id='cloud-1',request_nonce='fresh-request')
+  changed=json.loads(json.dumps(SOLUTION));changed['7']['rotation']=0
+  with self.assertRaises(urllib.error.HTTPError):self.post('plant/escape',{'pipes':changed})
+  self.assertTrue(self.post('plant/escape',{'pipes':SOLUTION})['state']['escaped'])
+ def test_search_alone_never_satisfies_inspection(self):
+  self.post('search',{'archived':True});self.assertNotIn('board_citation',server.STATE)
+  with self.assertRaises(urllib.error.HTTPError):self.post('research/extract',{'url':'https://untrusted.example/test'})
+ def test_subscription_changes_relock_the_door(self):
+  self.restore();self.assertTrue(server.STATE['rooms'][0]);r=self.post('subscription/test',{'filter':'midnight/#'})
+  self.assertFalse(r['report']['passed']);self.assertFalse(r['state']['rooms'][0]);self.assertFalse(r['state']['switchboard_applied'])
  def test_editing_dataset_invalidates_previous_caretaker_pass(self):
   server.STATE['rooms']=[True,True,True];server.STATE['escaped']=True;server.STATE['noc']['report']={'passed':True}
   self.post('dataset',{'source':content.starter_records()})

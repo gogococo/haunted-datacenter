@@ -1,84 +1,113 @@
 # SEV-0: The Haunted Datacenter
 
-A local Halloween escape-room POC: 2–3 people, one keyboard, 45 minutes. Click objects to discover three rooms. The app uses Python 3.9+ standard library; the optional checkpoint runner has separate model dependencies.
+Three clickable rooms for 2–3 people, one keyboard, and a 45-minute livestream. The game mixes real cloud/API operations with an explicitly simulated haunted building.
 
-## Start the game
+## Start
+
+Use a recent Python with OpenSSL/TLS 1.3 support (Python 3.11+ recommended), an authenticated Tavily CLI, and the Nebius AI Cloud CLI. Model serving has a separate optional Python environment.
 
 ```sh
-export NEBIUS_API_KEY='YOUR_KEY'
+export NEBIUS_API_KEY='YOUR_TOKEN_FACTORY_KEY'
+export NEBIUS_PROJECT_ID='YOUR_AI_CLOUD_PROJECT'
+export NEBIUS_SUBNET_ID='YOUR_SUBNET'
 python3 server.py
 ```
 
-Open http://127.0.0.1:8765 and click **Play**. Keep credentials in the server environment. The game binds to loopback and saves progress in `.runtime/`. Resetting the game does not delete cloud resources. This is a trusted local, single-team POC.
+Open http://127.0.0.1:8765 and click **Play**. Keep credentials in the server environment. The game binds to loopback and saves progress in `.runtime/`. The gear menu starts a genuinely fresh incident, including an untrained caretaker and new room gates.
 
-Room 1 uses the authenticated Tavily CLI. Rehearsal mode permits marked sample clues; Room 2 still uses actual model inference. The gear menu starts a fresh incident. Room previews are available at `/#2` and `/#3`; Room 2 has an isolated playtest button if Room 1 is incomplete. Its normal door opens after a combined behavior and camera-interlock check. The NOC goal and next-object clue remain visible while exploring.
+**Cloud resources survive a game reset.** Each full playthrough submits one real fine-tuning job and creates one real CPU Serverless endpoint. A repeated click cannot submit another resource while a submission is pending or its outcome is uncertain. Manage completed jobs and stop unneeded endpoints in the cloud console. Runtime receipts retain their IDs across resets.
 
-## Room 1 — The Haunted Switchboard
+## Room 1: research, inspect, apply
 
-Read Alex’s note, talk to Pip, Edgar and Mabel, and reconnect their cables. Use Tavily to research protocols. The rack offers a simulated terminal with real Mosquitto command syntax:
+Talk to Pip, Edgar and Mabel, then restore DNS, SMTP and MQTT wiring. Mabel's announcement speaker subscribes to service announcements. Its broad initial filter also broadcasts private mail and debugging.
+
+Search wildcard documentation with real **Tavily Search**, choose a returned source, and read it with **Tavily Extract**. Search alone does not satisfy the evidence gate. Enter a topic filter and send rehearsal messages; the UI shows every broadcast and every excluded message. MQTT matching handles whole-level `+`, terminal `#`, empty levels and the special `$` root rule.
+
+Read Mabel's saved bookmark for the separate door-control topic, then use the rack:
 
 ```sh
 ghostctl apply
-mosquitto_pub -h crypt.local -t TOPIC -m OPEN
+mosquitto_pub -h crypt.local -t midnight/door -m OPEN
 ```
 
-`ghostctl` is fictional. The broker, DNS and message delivery are mocked. Correct wiring and an MQTT documentation reference are required. Mabel forgot her topic: retrieve her launch post before publishing. Guessing the topic does not bypass that clue.
+`ghostctl` is fictional. Mosquitto syntax is real; broker traffic, DNS, devices and ghosts are simulated. Wildcards belong in subscriptions, not publish topic names. The door requires correct wiring, an inspected documentation source, a passing speaker filter, retrieved control topic, applied wiring and the actual publish command.
 
-Mabel’s bookmark is an authored game object that opens inside the old computer, with a return button. It does not pretend to be a Tavily result. The separate documentation search uses real Tavily and is required to apply the wiring. To fetch a public version of the post through Tavily Extract too, publish `web/mabel-post.html` at a public HTTPS URL and set `MABEL_POST_URL` before starting the server. Public posting is not performed automatically. Legacy rehearsal fixtures remain restricted to rehearsal mode.
+Mabel's bookmark is authored local game content. To additionally extract a public version with Tavily, publish `web/mabel-post.html` yourself and set `MABEL_POST_URL` to its public HTTPS URL. The game never pretends local content came from the web.
 
-## Room 2 — The Night Operations Center
+## Room 2: observe, demonstrate, train, compare
 
-- **Deployment rack:** connect the Token Factory account and discover the local trained backup. The main experiment restores a real previously trained checkpoint; the optional prompt comparison is a separate, labeled route.
-- **Security cameras:** send actual images to Token Factory vision. Review the equipment and fault it observed. The GPU rack has stopped fans, the cooling loop leaks, and the exit latch is stuck. These names are visible on the equipment; there is no invented dialect.
-- **Caretaker monitor:** vary temperature, output-token limit and instructions. These are inference settings. Lowering temperature does not teach missing maintenance rules, and lowering the token limit can truncate JSON.
-- **Training memories:** three illustrated cards show a wrong repair instruction, a missing equipment destination, and an answer the controller cannot parse. Drag replacement pieces onto each memory or click them. Feedback shows what that saved lesson would do. The cards edit the real damaged records; the other six are intact. An optional JSONL preview explains the mapping to 72 training and 18 validation phrasings.
-- **Alex’s Mac mini:** record the base model’s behavior, restore the trained checkpoint, then test again. Nine real replies cover three phrasings repeated three times. Checks measure correctness, consistency, brevity, completion, and exactly `action` plus `equipment` JSON.
+The camera view sends PNG pixels to the account's actual Token Factory vision endpoint and displays the model's observation. The text caretaker receives that actual description. Players try its command in a rehearsal, read an equipment service sticker, demonstrate a working repair and record the input/output lesson. The rehearsal is a simulator; physical cooling is repaired in Room 3.
 
-The final assessment makes three fresh vision calls and feeds the actual observed equipment/fault pairs to the text model. An incorrect visual observation cannot pass through a lucky repair answer. Changed settings or examples invalidate the current assessment.
+Three recorded demonstrations produce three actual vision-derived training records. These are added to 72 prepared practice prompts (nine known fault reports with eight introductions each). Eighteen separate prompts are used for validation. The Mac mini uses three different fault descriptions, each repeated three times; this small assessment is a teaching aid, not a broad reliability test.
 
-### Trained backup used for this playtest
+The player must measure a base-model baseline and **submit a real Token Factory LoRA job**. The UI shows its actual ID and status. Uploads and job submission happen through the Token Factory API; there is no scripted training timer. Ten epochs, rank 16, alpha 32, dropout 0, batch 16 and learning rate 0.0002 match the small-model benchmark recipe.
 
-Qwen3-0.6B was LoRA-trained on Token Factory before the episode: 10 epochs, rank 16, alpha 32, dropout 0, batch size 16, learning rate 0.0002. The actual run took **8m45s**. The rack’s five-second terminal replay shows recorded API events, not live training or a fabricated progress log.
+Two explicit serving routes can pass the same behavior checks:
 
-The final checkpoint was downloaded through the dashboard after API weight downloads returned HTTP 403. Its 392 adapter tensors are loaded with strict name, coverage and value checks. The local runner compares file hashes with the prepared receipt before loading. Job, model, dataset IDs and checkpoint membership are checked against Token Factory when restoring the backup. The API provides no checksum to independently prove that a manually downloaded weight file belongs to the selected checkpoint; the host selects it in the dashboard.
+- **Fine-tuned checkpoint:** select an actual completed checkpoint prepared before the stream, or prepare the new job's weights after completion. Its source job is shown separately from the newly submitted job. The five-second archive is clearly a replay of an earlier real run. Restoring a checkpoint never marks the new job complete.
+- **Prompt alternative:** provide examples to the public Token Factory text model. This is labeled prompting, never trained weights. It uses a larger model and is not a controlled same-model comparison. Real job submission remains required for the room.
 
-**Serving boundary:** camera inference uses Token Factory, with an existing dedicated vision endpoint when available. Trained text inference runs locally from the Token Factory checkpoint. This POC does not create a new Token Factory-hosted text endpoint. The prompt comparison instead uses Token Factory’s public text endpoint and never claims fine-tuned weights.
+Tooltips explain temperature, output tokens and instructions. The Mac mini evaluates actual responses for command correctness, JSON schema, completion, brevity and consistency. Its final assessment makes three fresh vision calls and sends the observed descriptions to the selected text model. Edits invalidate prior assessment results.
 
-The downloaded Qwen3-0.6B checkpoint passed 27/27 test phrasings locally, versus 0/27 for its base weights and 17/27 with three examples in the prompt. These are new phrasings of known reports, not unseen intents or a reliability guarantee. Only this small trained checkpoint has been evaluated; the other two completed jobs still lack downloaded weights. Details: `data/caretaker-benchmark.json`.
+**Serving boundary:** vision uses Token Factory, including the existing dedicated vision endpoint when configured. The prepared Qwen3-0.6B LoRA runs on a local checkpoint runner. The POC does not claim a new Token Factory-hosted text deployment. Room 3 is the distinct real application-deployment lesson.
 
-### Prepare your own local checkpoint runner
+### Prepare a checkpoint runner
 
-Keep this environment separate from the standard-library game server:
+For a new viewer setup, train and prepare a checkpoint before starting the game. This remains a developer setup workflow, not a finished installer:
+
+```sh
+python3 tokenfactory.py train --model Qwen/Qwen3-0.6B \
+  --seed solutions/seed-clean.jsonl --epochs 10 --learning-rate 0.0002
+python3 tokenfactory.py status --job YOUR_JOB_ID
+```
+
+After completion, download the final `adapter_model.safetensors` through the Token Factory dashboard. API weight downloads returned AccessDenied during preparation; the dashboard download worked.
 
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install torch transformers peft safetensors
 hf download Qwen/Qwen3-0.6B --local-dir models/base
-```
-
-Use your own completed Token Factory job and download its final `adapter_model.safetensors` through the dashboard. Prepare a receipt using that job’s ID and the matching base-model folder:
-
-```sh
-python3 checkpoint_setup.py --job YOUR_JOB_ID --weights /path/to/adapter_model.safetensors --base-dir models/base
+python3 checkpoint_setup.py --job YOUR_JOB_ID \
+  --weights /path/to/adapter_model.safetensors --base-dir models/base
 .venv/bin/python caretaker_runner.py --receipt .runtime/caretaker/receipt.json
 ```
 
-The setup command reads metadata/configuration and copies the dashboard download; it submits no training or deployment. It verifies the file size, matching configuration and repaired-example recipe. The runner serves only `127.0.0.1:8770`, supports base/adapter comparison, and needs no API key. The game server still needs your key to inspect cameras and verify the job. Match the original training recipe when preparing another checkpoint; a base model alone is not the trained backup.
+The runner binds to `127.0.0.1:8770`. It checks adapter keys, loaded tensor values, file hashes and base-model configuration. Restoration verifies cloud job/model/dataset/checkpoint metadata. A manually selected dashboard download has no independent cloud checksum; the host selects the correct file.
 
-For Jacquie’s current workspace, the selected receipt and separate runtime are already prepared outside the downloadable app. Viewer setup remains a developer workflow for this POC, not a finished installer. The legacy `tokenfactory.py` CLI supports manual training/deployment inspection; its reports cannot unlock the game.
+The earlier 72-prompt benchmark passed 27/27 prefixed known reports for this checkpoint. Historical results are in `data/caretaker-benchmark.json`; the current Mac mini assessment uses genuinely different descriptions.
 
-## Room 3 — The Generator Room
+## Room 3: deploy and verify
 
-Drag six pipes into the grid, rotate them, and connect SUPPLY → GPU heat exchanger → RETURN. A click-to-place alternative supports keyboards and touchscreens. The routing validator follows actual connected ports and identifies gaps and wrong rotations; fixed equipment and the parts inventory cannot be bypassed.
+Repair the actual closed circuit: **pump → GPU cold plate → heat exchanger → reservoir → pump**. Six movable pipes must connect all four fixed components without a gap or disconnected spare. A pressure test validates ports and the complete return path. Warm return and cooled supply are visually distinct.
 
-Recover the cooling controller with dropdowns. The local simulator measures temperature, power, circulation and alarm policy. Token Factory can explain the supplied diagnostic logs, but advice does not replace a passing health check. The emergency exit requires both earlier rooms and the current pipe layout/configuration to pass. No physical equipment is controlled, and no code-writing task remains in Room 3.
+The local control service is dead. Players deploy `cloud_controller.py` as a real **Nebius Serverless AI CPU endpoint** using `python:3.12-slim` and file injection; no Docker build is required. The UI exposes port, temperature target and power budget, shows equivalent CLI syntax, reads actual container logs, and retrieves the managed HTTPS URL.
+
+1. Deployment status proves that cloud resources started.
+2. `GET /healthz` proves the application answers.
+3. `POST /simulate` sends the game's actual circuit status and a fresh nonce to the deployed app. The app chooses a fan/pump profile and returns measured simulator results. The game independently checks its limits and request identity.
+
+The exit requires a current passing cloud report for the current circuit and endpoint, plus both earlier rooms. No locally calculated report alone can unlock it. Sensor values and physical hardware remain simulated; the control application executes in the cloud.
+
+Cloud startup can take several minutes. Start deployment before working on the pipe puzzle. The first tested CPU endpoint took roughly six minutes to reach RUNNING, so preflight project access and allow time for provisioning/image pulling.
+
+### Serverless setup
+
+Authenticate the Nebius CLI using your own AI Cloud account, select your project, and set `NEBIUS_PROJECT_ID` and `NEBIUS_SUBNET_ID` in the game-server environment. The Token Factory API key alone does not configure AI Cloud access. Alternatively, an ignored `.runtime/serverless/config.json` may contain:
+
+```json
+{"project_id":"YOUR_PROJECT_ID","subnet_id":"YOUR_SUBNET_ID","platform":"cpu-d3","preset":"2vcpu-8gb"}
+```
+
+Endpoint authentication tokens are generated server-side, written only to private runtime receipts and omitted from browser state. The CLI response is projected to safe metadata. Uncertain creates are not automatically retried. If a request fails after submission, check the console before making another resource.
+
+Documentation: https://docs.nebius.com/serverless/quickstart/endpoints
 
 ## Verification
 
 ```sh
-python3 -m unittest -q test_game test_caretaker test_plant
+python3 -m unittest -q test_game test_caretaker test_plant test_upgrade
 ```
 
-The automated suite mocks cloud calls and covers routing, inventory, no-bypass gates, current assessment/configuration, incomplete responses, backup identity, prompt-route separation, and stale asynchronous completion after reset. Browser playtests separately verify the controls. Real integration testing uses actual Tavily search, Token Factory vision, the downloaded adapter and diagnostic inference; Mabel’s saved bookmark remains an authored local game clue rather than a web extraction.
+Automated tests mock external APIs. Separate browser/integration playtests use real Tavily Search + Extract, Token Factory vision and training, the prepared adapter, and the actual deployed CPU application.
 
-Model weights, virtual environments, API keys and `.runtime/` are excluded from Git and the downloadable archive. Manage existing cloud jobs and endpoints in Token Factory; resetting this game does not cancel or remove them.
+API keys, runtime state, cloud authentication tokens, model weights and virtual environments are excluded from Git and the downloadable archive.

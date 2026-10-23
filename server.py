@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 import content
 import caretaker, copy
-import switchboard,clue_post,plant
+import switchboard,clue_post,plant,lessons,serverless
 
 ROOT=Path(__file__).resolve().parent
 RUNTIME=ROOT/'.runtime'; RUNTIME.mkdir(exist_ok=True)
@@ -51,7 +51,7 @@ def refresh_archive():
     STATE['rooms'][0]=ready
 
 def refresh_switchboard():
-    ready=bool(STATE.get('board',{}).get('ready') and STATE.get('board_citation') and STATE.get('topic_evidence') and STATE.get('switchboard_applied') and STATE.get('door_signal'))
+    ready=bool(STATE.get('board',{}).get('ready') and STATE.get('board_citation') and STATE.get('topic_evidence') and STATE.get('switchboard_applied') and STATE.get('door_signal') and STATE.get('subscription',{}).get('passed'))
     if ready and not STATE['rooms'][0]:event('All three ghosts routed correctly. Research verified. Archive door unlocked.')
     STATE['rooms'][0]=ready
 
@@ -60,14 +60,14 @@ def view():
         STATE['board']=switchboard.initial();save()
     if STATE['training'] and STATE['training']['status']=='running' and time.time()-STATE['training']['started']>=16:
         STATE['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**STATE,'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(STATE['sources']['dataset']),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**STATE,'noc':{**STATE['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'serverless_configured':bool(serverless.config(RUNTIME)['project_id'] and serverless.config(RUNTIME)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(STATE['sources']['dataset']),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=STATE['noc']
     if (noc.get('operation') or {}).get('status')=='running':raise ValueError('The caretaker is already working. Wait for the current operation.')
     snapshot=copy.deepcopy(noc);source=STATE['sources']['dataset'];session=STATE['created_at']
     if action in ('test','verify','train','deploy','backup','prompt-profile'):
-        snapshot['previous_report']=snapshot.get('report');snapshot['report']=None;snapshot.pop('final',None)
+        snapshot['previous_report']=snapshot.get('report');snapshot['report']=None;snapshot.pop('final',None);noc['report']=None;noc.pop('final',None)
     if action in ('final','verify'):snapshot.pop('final',None)
     noc['operation']={'action':action,'status':'running','message':'Checking the caretaker…','started':time.time()};noc['revision']+=1
     if action in ('test','verify','train','deploy','backup','prompt-profile','final'):
@@ -91,6 +91,36 @@ def launch_noc(action,body):
             save()
     threading.Thread(target=worker,daemon=True).start()
 
+
+def launch_plant(action,body):
+    p=STATE['plant'];session=STATE['created_at']
+    if (p.get('operation') or {}).get('status')=='running':raise ValueError('A cloud request is still running. You can place pipes while deployment submits.')
+    snapshot=copy.deepcopy(p)
+    if action in ('deploy','health','test','replace'):snapshot['report']=None
+    if action in ('deploy','health','replace'):snapshot['health']=None
+    board=plant.normalize(body.get('pipes',p['pipes']))
+    if action in ('deploy','health','test','replace'):p['report']=None;STATE['rooms'][2]=False;STATE['escaped']=False
+    p['operation']={'action':action,'status':'running','message':{'deploy':'Submitting the real CPU app to Nebius Serverless…','refresh':'Reading cloud endpoint status…','health':'Requesting the deployed app’s /healthz route…','test':'Sending this circuit’s sensor report to the real app…','logs':'Reading the real app’s logs…','replace':'Stopping the old app and deploying the corrected configuration…'}[action]};p['revision']+=1
+    def worker():
+        try:
+            if action=='deploy':message=serverless.deploy(snapshot,body,RUNTIME)
+            elif action=='replace':message=serverless.replace(snapshot,body,RUNTIME)
+            elif action=='refresh':message=serverless.refresh(snapshot,RUNTIME)
+            elif action=='health':message=serverless.health(snapshot,RUNTIME)
+            elif action=='logs':message=serverless.logs(snapshot,RUNTIME)
+            else:message=serverless.assess(snapshot,RUNTIME,board)
+            status='succeeded'
+        except (ValueError,OSError,KeyError,TypeError) as error:message=str(error) if isinstance(error,ValueError) else 'Cloud request failed. Check the endpoint in the console.';status='failed'
+        except Exception:message='Cloud operation failed. Check the endpoint status and try the specific check again.';status='failed'
+        with LOCK:
+            if STATE['created_at']!=session:return
+            current=STATE['plant']
+            for key in ('endpoint','health','deployment_unknown','cloud_logs','previous_endpoints'):
+                if key in snapshot:current[key]=snapshot[key]
+            if action=='test':
+                for key in ('settings','pipes','pipe_report','report'):current[key]=snapshot.get(key)
+            current['operation']={'action':action,'status':status,'message':message,'finished':time.time()};current['revision']+=1;save()
+    threading.Thread(target=worker,daemon=True).start()
 
 def launch_plant_advice(values):
     current=STATE['plant'];session=STATE['created_at']
@@ -120,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/state':
             with LOCK: self.json(view())
             return
-        files={'/training-replay.json':('web/training-replay.json','application/json'),'/plant.js':('web/plant.js','text/javascript'),'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
+        files={'/controller.py':('cloud_controller.py','text/plain'),'/training-replay.json':('web/training-replay.json','application/json'),'/plant.js':('web/plant.js','text/javascript'),'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
         if path not in files: self.send_error(404); return
         file,mime=files[path]; data=(ROOT/file).read_bytes()
         self.send_response(200);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(data)));self.send_header('X-Content-Type-Options','nosniff');self.end_headers();self.wfile.write(data)
@@ -186,9 +216,25 @@ class Handler(BaseHTTPRequestHandler):
                 if not sources: raise ValueError('No protocol reference found. Try describing what the ghost wants to do, or research one of the socket labels.')
                 STATE['evidence']='tavily';event('Tavily evidence retrieved from authoritative documentation.')
             STATE['search_results']=sources
-            mqtt=next((x for x in sources if 'MQTT' in x.get('protocols',[])),None)
-            if mqtt: STATE['board_citation']=mqtt
+            # A search is discovery. Players must explicitly inspect a source.
+
             refresh_switchboard();return {'sources':sources}
+        elif path=='/api/research/extract':
+            url=b.get('url');source=next((x for x in STATE.get('search_results',[]) if x['url']==url),None)
+            if not source:raise ValueError('Choose a source returned by your Tavily search.')
+            if 'MQTT' not in source.get('protocols',[]):raise ValueError('This reference covers another protocol. Find MQTT topic-filter documentation for the speaker.')
+            proc=subprocess.run(['tvly','extract',url,'--query','MQTT topic filter + single level wildcard # multi level wildcard subscription topic levels','--chunks-per-source','3','--extract-depth','advanced','--json'],capture_output=True,text=True,timeout=45)
+            if proc.returncode:raise ValueError('Tavily Extract could not read that source. Try another documentation result.')
+            data=json.loads(proc.stdout);rows=data.get('results',[])
+            if not rows:raise ValueError('No readable document returned. Choose another source.')
+            text=rows[0].get('raw_content') or rows[0].get('content','')
+            if not text.strip():raise ValueError('The source had no extractable text. Try another reference.')
+            STATE['board_citation']={**source,'content':text[:6000],'kind':'tavily-extract'}
+            refresh_switchboard();return {'source':STATE['board_citation']}
+        elif path=='/api/subscription/test':
+            STATE['subscription']=switchboard.test_subscription(b.get('filter',''))
+            STATE['switchboard_applied']=False;STATE['door_signal']=False
+            refresh_switchboard();return {'report':STATE['subscription']}
         elif path=='/api/switchboard/test':
             previous=STATE.get('board',switchboard.initial())
             board=switchboard.evaluate(b.get('routes',{}));board['attempts']=previous.get('attempts',0)+1
@@ -205,26 +251,39 @@ class Handler(BaseHTTPRequestHandler):
             return {'output':output}
         elif path.startswith('/api/plant/'):
             action=path.rsplit('/',1)[1];p=STATE['plant']
-            if action=='advice':launch_plant_advice(b.get('settings',p['settings']))
-            elif action in ('pipes','test'):
-                board=plant.normalize(b.get('pipes',{}));report=plant.check_pipes(board)
-                values=plant.settings(b.get('settings',p['settings'])) if action=='test' else None
-                p['pipes']=board;p['pipe_report']=report;p['report']=None
-                STATE['rooms'][2]=False;STATE['escaped']=False
-                if action=='test':
-                    p['settings']=values;p['report']=plant.test_controller(board,values)
-                p['revision']+=1
+            if action in ('deploy','refresh','health','test','logs','replace'):
+                if not STATE['rooms'][0] and not STATE['noc'].get('playtest'):raise ValueError('Restore communications before deploying the cooling service.')
+                launch_plant(action,b)
+            elif action=='pipes':
+                if (p.get('operation') or {}).get('action')=='test' and p['operation']['status']=='running':raise ValueError('Wait for the cooling test before editing pipes.')
+                board=plant.normalize(b.get('pipes',{}));p['pipes']=board;p['pipe_report']=plant.check_pipes(board);p['report']=None
+                STATE['rooms'][2]=False;STATE['escaped']=False;p['revision']+=1
             elif action=='escape':
                 board=plant.normalize(b.get('pipes',{}));report=p.get('report') or {}
-                if not STATE['rooms'][0] or not STATE['rooms'][1]:raise ValueError('Restore communications and pass the caretaker’s live assessment before releasing the exit.')
-                if not report.get('passed') or report.get('board_hash')!=plant.fingerprint(board) or b.get('settings')!=report.get('settings') or not plant.check_pipes(board)['passed']:raise ValueError('Seal the cooling loop and pass a health check with this layout and configuration first.')
-                STATE['rooms'][2]=True;STATE['escaped']=True;STATE['finished']=time.time();event('Cooling stable. Backup generator on standby. Emergency exit released.')
+                if not STATE['rooms'][0] or not STATE['rooms'][1]:raise ValueError('Restore communications and certify the caretaker before releasing the exit.')
+                if not report.get('passed') or not report.get('request_nonce') or report.get('endpoint_id')!=(p.get('endpoint') or {}).get('id') or report.get('board_hash')!=plant.fingerprint(board) or not plant.check_pipes(board)['passed']:raise ValueError('Complete the circuit, deploy the controller, and pass its live cooling test with this layout.')
+                STATE['rooms'][2]=True;STATE['escaped']=True;STATE['finished']=time.time();event('Closed cooling circuit stable. Cloud controller healthy. Everyone leaves together.')
             else:raise ValueError('Unknown generator-room action.')
         elif path.startswith('/api/noc/'):
             action=path.rsplit('/',1)[1]
             if action=='playtest':
                 STATE['noc']['playtest']=True;STATE['noc']['revision']+=1
                 STATE['started']=time.time();STATE['paused']=False;STATE['pause_at']=None;STATE['pause_total']=0;STATE.pop('finished',None)
+            elif action in ('evidence','rehearse','try-probe'):
+                if (STATE['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the current model request.')
+                message=caretaker.run(action,STATE['noc'],b,STATE['sources']['dataset'],RUNTIME,lambda _:None)
+                STATE['noc']['revision']+=1
+                return {'message':message}
+            elif action=='preview':
+                if not lessons.complete(STATE['noc']):raise ValueError('Record the three camera lessons first.')
+                rows,errors=content.validate_seed(STATE['sources']['dataset'])
+                if errors:raise ValueError(errors[0])
+                return {'records':content.expand(rows,content.TRAIN_TEMPLATES)+[content.record(x['input'],x['answer']) for x in STATE['noc']['lessons'].values()]}
+            elif action=='record':
+                if (STATE['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the caretaker’s current request.')
+                STATE['sources']['dataset']=lessons.record(STATE['noc'],b.get('camera'),STATE['sources']['dataset'])
+                _,errors=content.validate_seed(STATE['sources']['dataset']);STATE['noc']['dataset_report']={'passed':not errors,'errors':errors};STATE['noc']['revision']+=1
+                STATE['rooms'][1]=False;STATE['rooms'][2]=False;STATE['escaped']=False
             elif action=='memory':
                 if (STATE['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the caretaker to finish its current task.')
                 source=content.repair_memory(STATE['sources']['dataset'],b.get('memory'),b.get('choice'))
@@ -240,7 +299,7 @@ class Handler(BaseHTTPRequestHandler):
                 equipment=str(b.get('equipment','')).strip().lower();fault=str(b.get('fault','')).strip().lower()
                 request=caretaker.camera_request(equipment,fault)
                 observation.update(equipment=equipment,fault=fault,request=request,reviewed=True);STATE['noc']['revision']+=1
-            elif action in ('connect','inspect','vision','review-probe','probe','test','verify','train','refresh','deploy','backup','prompt-profile','final'):
+            elif action in ('connect','inspect','vision','review-probe','probe','test','verify','train','refresh','deploy','backup','prompt-profile','final','evidence','rehearse','try-probe'):
                 if not STATE['rooms'][0] and not STATE['noc'].get('playtest') and action not in ('connect','refresh'):raise ValueError('Restore Room 1 before running the caretaker. You can explore this room first.')
                 launch_noc(action,b)
             else:raise ValueError('Unknown caretaker action.')
