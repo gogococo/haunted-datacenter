@@ -42,39 +42,30 @@ Three recorded demonstrations produce three actual vision-derived training recor
 
 The player must measure a base-model baseline and **submit a real Token Factory LoRA job**. The UI shows its actual ID and status. Uploads and job submission happen through the Token Factory API; there is no scripted training timer. Ten epochs, rank 16, alpha 32, dropout 0, batch 16 and learning rate 0.0002 match the small-model benchmark recipe.
 
-Two explicit serving routes can pass the same behavior checks:
+The player path has one model: **the checkpoint produced by this playthrough's submitted job**. Submitting training opens the maintenance hatch. Alex asks the team to carry his terminal downstairs while the caretaker studies. In Room 3, repair the loop and deploy the CPU controller while training runs. Finish at the portable terminal: load your checkpoint, compare behavior with the baseline, and pass the safety checks. There is no required return trip to the NOC.
 
-- **Fine-tuned checkpoint:** select an actual completed checkpoint prepared before the stream, or prepare the new job's weights after completion. Its source job is shown separately from the newly submitted job. The five-second archive is clearly a replay of an earlier real run. Restoring a checkpoint never marks the new job complete.
-- **Prompt alternative:** provide examples to the public Token Factory text model. This is labeled prompting, never trained weights. It uses a larger model and is not a controlled same-model comparison. Real job submission remains required for the room.
+The terminal attempts the official checkpoint download API. If storage returns AccessDenied, it offers a download/import step for **that same job's final adapter**. The player selects `adapter_model.safetensors`; the server checks the cloud job, file size, configuration and checkpoint metadata, prepares a hashed receipt, and loads the adapter into the existing local runner. A manually selected dashboard download has no independent cloud checksum, so the player must select the correct job's final file. The retrieval sequence follows the [Token Factory checkpoint documentation](https://docs.tokenfactory.nebius.com/post-training/how-to-fine-tune). It is never silently replaced with an earlier run.
 
-Tooltips explain temperature, output tokens and instructions. The Mac mini evaluates actual responses for command correctness, JSON schema, completion, brevity and consistency. Its final assessment makes three fresh vision calls and sends the observed descriptions to the selected text model. Edits invalidate prior assessment results.
+Alex's old checkpoint and the larger-model prompt comparison are **host-only overrides**, visibly labeled when selected. The default certificate gate rejects a model from a different job. Actual inference results must match the loaded artifact identity; changed weights/settings invalidate the certificate.
 
-**Serving boundary:** vision uses Token Factory, including the existing dedicated vision endpoint when configured. The prepared Qwen3-0.6B LoRA runs on a local checkpoint runner. The POC does not claim a new Token Factory-hosted text deployment. Room 3 is the distinct real application-deployment lesson.
+Tooltips explain generation settings. The portable terminal compares correctness, JSON schema, completion, brevity and consistency. Its final assessment makes three fresh vision calls and sends the actual observed descriptions to the trained text model. Both the caretaker certificate and the real cloud cooling test are required at the final exit.
 
-### Prepare a checkpoint runner
+**Serving boundary:** vision and training use Token Factory. The small LoRA text model runs locally. Room 3 deploys the real application on Nebius Serverless AI. This POC does not claim a new Token Factory-hosted text endpoint.
 
-For a new viewer setup, train and prepare a checkpoint before starting the game. This remains a developer setup workflow, not a finished installer:
+### Start the local model runner
 
-```sh
-python3 tokenfactory.py train --model Qwen/Qwen3-0.6B \
-  --seed solutions/seed-clean.jsonl --epochs 10 --learning-rate 0.0002
-python3 tokenfactory.py status --job YOUR_JOB_ID
-```
-
-After completion, download the final `adapter_model.safetensors` through the Token Factory dashboard. API weight downloads returned AccessDenied during preparation; the dashboard download worked.
+A fresh viewer needs the base model, not an earlier fine-tuning job:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/pip install torch transformers peft safetensors
-hf download Qwen/Qwen3-0.6B --local-dir models/base
-python3 checkpoint_setup.py --job YOUR_JOB_ID \
-  --weights /path/to/adapter_model.safetensors --base-dir models/base
-.venv/bin/python caretaker_runner.py --receipt .runtime/caretaker/receipt.json
+.venv/bin/pip install torch transformers peft safetensors huggingface_hub
+.venv/bin/hf download Qwen/Qwen3-0.6B --local-dir models/base
+.venv/bin/python caretaker_runner.py --base-dir models/base
 ```
 
-The runner binds to `127.0.0.1:8770`. It checks adapter keys, loaded tensor values, file hashes and base-model configuration. Restoration verifies cloud job/model/dataset/checkpoint metadata. A manually selected dashboard download has no independent cloud checksum; the host selects the correct file.
+The runner starts with base weights on `127.0.0.1:8770`. Its control token is private in `.runtime/caretaker/runner-control.json`; the game uses it to load prepared receipts inside the configured runtime folder. Model loading checks every adapter tensor and its actual loaded value. A failed load retains the current model. Keep the model environment separate from the standard-library game server.
 
-The earlier 72-prompt benchmark passed 27/27 prefixed known reports for this checkpoint. Historical results are in `data/caretaker-benchmark.json`; the current Mac mini assessment uses genuinely different descriptions.
+For a host fallback, the existing `checkpoint_setup.py --job ... --weights ... --base-dir ...` workflow still prepares an earlier receipt. It is loaded only by the explicit host override. Historical benchmark results are in `data/caretaker-benchmark.json`.
 
 ## Room 3: deploy and verify
 
@@ -105,7 +96,7 @@ Documentation: https://docs.nebius.com/serverless/quickstart/endpoints
 ## Verification
 
 ```sh
-python3 -m unittest -q test_game test_caretaker test_plant test_upgrade
+python3 -m unittest -q test_game test_caretaker test_plant test_upgrade test_checkpoint_flow
 ```
 
 Automated tests mock external APIs. Separate browser/integration playtests use real Tavily Search + Extract, Token Factory vision and training, the prepared adapter, and the actual deployed CPU application.

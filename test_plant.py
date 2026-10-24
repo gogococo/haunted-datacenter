@@ -38,7 +38,7 @@ class RecoveryTests(unittest.TestCase):
  def source(self):return '\n'.join(json.dumps(r) for r in content.clean_records())
  def health(self):return {'ready':True,'recipe_hash':content.recipe_hash(self.source()),'model':'Qwen/Qwen3-0.6B','job_id':'job','checkpoint_id':'checkpoint','training_file':'train','validation_file':'valid','artifact_hash':'hash'}
  def prepare(self,n):
-  n['submission']={'id':'new-job','pack_hash':lessons.packet_hash(n,self.source())};return n
+  n['submission']={'id':'new-job','pack_hash':lessons.packet_hash(n,self.source())};n['host_override']={'kind':'backup'};return n
  def test_backup_requires_baseline_repaired_examples_and_completed_job(self):
   n=self.prepare(c.initial())
   with self.assertRaisesRegex(ValueError,'base model first'):c.activate_backup(n,self.source())
@@ -50,11 +50,11 @@ class RecoveryTests(unittest.TestCase):
   job={'id':'job','status':'succeeded','model':h['model'],'training_file':'train','validation_file':'valid'}
   with patch.object(c,'runner_call',return_value=h),patch.object(c.tf,'api',side_effect=[job,{'data':[{'id':'checkpoint'}]}]):c.activate_backup(n,self.source())
   self.assertEqual(n['route'],'finetuned');self.assertTrue(n['runner']['active']);self.assertIsNone(n['report'])
-  reply={'id':'reply','model':h['model'],'choices':[{'message':{'content':'{}'},'finish_reason':'stop'}]}
+  reply={'id':'reply','model':h['model'],'artifact_hash':'hash','choices':[{'message':{'content':'{}'},'finish_reason':'stop'}]}
   with patch.object(c,'runner_call',return_value=reply) as call:c.text_call(n,'A fault')
   self.assertTrue(call.call_args.args[1]['use_adapter'])
  def test_prompt_comparison_is_explicitly_separate(self):
-  n=self.prepare(c.initial());n['baseline']={'passed':False};c.activate_prompt_route(n,self.source())
+  n=self.prepare(c.initial());n['baseline']={'passed':False};n['host_override']={'kind':'prompt'};c.activate_prompt_route(n,self.source())
   self.assertEqual(n['route'],'prompt');self.assertIsNone(n['job'])
   with patch.object(c,'completion',return_value={}) as call:c.text_call(n,'A fault')
   self.assertEqual(call.call_args.args[0],c.BASE)

@@ -33,6 +33,19 @@ if STATE.get('noc',{}).get('version')!=caretaker.VERSION:
 if (STATE['noc'].get('operation') or {}).get('status')=='running':
     STATE['noc']['operation'].update(status='interrupted',message='Server restarted during this operation. Check cloud status before retrying training or deployment.')
 
+# Preserve saved lessons/jobs while retiring the old default shortcut.
+if STATE['noc'].get('flow_version')!=2:
+    (RUNTIME/('before-own-checkpoint-'+str(int(time.time()))+'.json')).write_text(json.dumps(STATE))
+    n=STATE['noc'];n['flow_version']=2
+    if n.get('route')!='untrained' and (n.get('job') or {}).get('id')!=(n.get('submission') or {}).get('id'):
+        n['route']='untrained';n['report']=None;n.pop('final',None)
+        if n.get('runner'):n['runner']['active']=False
+        STATE['rooms'][1]=False;STATE['rooms'][2]=False;STATE['escaped']=False
+
+def maintenance_access():
+    n=STATE['noc'];j=n.get('submission') or {}
+    return bool(STATE['rooms'][0] and j.get('id') and j.get('pack_hash')==lessons.packet_hash(n,STATE['sources']['dataset']))
+
 def save():
     temp=RUNTIME/'state.tmp'; temp.write_text(json.dumps(STATE)); temp.replace(RUNTIME/'state.json')
 
@@ -60,17 +73,17 @@ def view():
         STATE['board']=switchboard.initial();save()
     if STATE['training'] and STATE['training']['status']=='running' and time.time()-STATE['training']['started']>=16:
         STATE['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**STATE,'noc':{**STATE['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'serverless_configured':bool(serverless.config(RUNTIME)['project_id'] and serverless.config(RUNTIME)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(STATE['sources']['dataset']),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**STATE,'maintenance_route_open':maintenance_access(),'noc':{**STATE['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'serverless_configured':bool(serverless.config(RUNTIME)['project_id'] and serverless.config(RUNTIME)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(STATE['sources']['dataset']),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=STATE['noc']
     if (noc.get('operation') or {}).get('status')=='running':raise ValueError('The caretaker is already working. Wait for the current operation.')
     snapshot=copy.deepcopy(noc);source=STATE['sources']['dataset'];session=STATE['created_at']
-    if action in ('test','verify','train','deploy','backup','prompt-profile'):
+    if action in ('test','verify','train','deploy','backup','prompt-profile','load-own'):
         snapshot['previous_report']=snapshot.get('report');snapshot['report']=None;snapshot.pop('final',None);noc['report']=None;noc.pop('final',None)
     if action in ('final','verify'):snapshot.pop('final',None)
     noc['operation']={'action':action,'status':'running','message':'Checking the caretaker…','started':time.time()};noc['revision']+=1
-    if action in ('test','verify','train','deploy','backup','prompt-profile','final'):
+    if action in ('test','verify','train','deploy','backup','prompt-profile','load-own','final'):
         STATE['rooms'][1]=False;STATE['rooms'][2]=False;STATE['escaped']=False
     def progress(message):
         with LOCK:
@@ -148,7 +161,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path=urlparse(self.path).path
         if path=='/api/state':
-            with LOCK: self.json(view())
+            with LOCK:
+                n=STATE['noc'];job=n.get('submission') or {}
+                if job.get('id') and job.get('status') not in ('succeeded','failed','cancelled') and time.time()-n.get('polled_at',0)>=20 and (n.get('operation') or {}).get('status')!='running':
+                    n['polled_at']=time.time();launch_noc('refresh',{})
+                self.json(view())
             return
         files={'/controller.py':('cloud_controller.py','text/plain'),'/training-replay.json':('web/training-replay.json','application/json'),'/plant.js':('web/plant.js','text/javascript'),'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
         if path not in files: self.send_error(404); return
@@ -160,6 +177,13 @@ class Handler(BaseHTTPRequestHandler):
         if origin and urlparse(origin).netloc!=self.headers.get('Host'): self.json({'error':'Cross-origin request refused.'},403);return
         try:
             length=int(self.headers.get('Content-Length',0))
+            if urlparse(self.path).path=='/api/noc/import':
+                if not 0<length<=64*1024*1024:raise ValueError('Choose a LoRA adapter under 64 MiB.')
+                uploaded=self.rfile.read(length)
+                if len(uploaded)!=length:raise ValueError('Upload was incomplete.')
+                with LOCK:
+                    launch_noc('load-own',{'uploaded':uploaded});save();self.json({'state':view()})
+                return
             if length>50000: raise ValueError('Request too large.')
             body=json.loads(self.rfile.read(length) or b'{}')
             with LOCK:
@@ -173,7 +197,9 @@ class Handler(BaseHTTPRequestHandler):
             if not STATE['started']: STATE['started']=time.time();STATE['paused']=False;STATE['pause_at']=None;STATE['pause_total']=0;event('You accepted the pager. Forty-five minutes until midnight.')
         elif path=='/api/host':
             act=b['action']
-            if act=='reset': STATE=fresh()
+            if act in ('caretaker-backup','caretaker-prompt'):
+                launch_noc('backup' if act=='caretaker-backup' else 'prompt-profile',{'host_override':True})
+            elif act=='reset': STATE=fresh()
             elif act=='pause':
                 if not STATE['paused']: STATE['pause_at']=time.time();STATE['paused']=True
                 else: STATE['pause_total']+=time.time()-STATE['pause_at'];STATE['paused']=False;STATE['pause_at']=None
@@ -252,7 +278,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path.startswith('/api/plant/'):
             action=path.rsplit('/',1)[1];p=STATE['plant']
             if action in ('deploy','refresh','health','test','logs','replace'):
-                if not STATE['rooms'][0] and not STATE['noc'].get('playtest'):raise ValueError('Restore communications before deploying the cooling service.')
+                if not maintenance_access() and not STATE['noc'].get('playtest'):raise ValueError('Submit the caretaker training job before entering the generator room.')
                 launch_plant(action,b)
             elif action=='pipes':
                 if (p.get('operation') or {}).get('action')=='test' and p['operation']['status']=='running':raise ValueError('Wait for the cooling test before editing pipes.')
@@ -266,6 +292,7 @@ class Handler(BaseHTTPRequestHandler):
             else:raise ValueError('Unknown generator-room action.')
         elif path.startswith('/api/noc/'):
             action=path.rsplit('/',1)[1]
+            if action in ('backup','prompt-profile'):raise ValueError('Fallbacks and prompt experiments are available in host controls only.')
             if action=='playtest':
                 STATE['noc']['playtest']=True;STATE['noc']['revision']+=1
                 STATE['started']=time.time();STATE['paused']=False;STATE['pause_at']=None;STATE['pause_total']=0;STATE.pop('finished',None)
@@ -299,7 +326,7 @@ class Handler(BaseHTTPRequestHandler):
                 equipment=str(b.get('equipment','')).strip().lower();fault=str(b.get('fault','')).strip().lower()
                 request=caretaker.camera_request(equipment,fault)
                 observation.update(equipment=equipment,fault=fault,request=request,reviewed=True);STATE['noc']['revision']+=1
-            elif action in ('connect','inspect','vision','review-probe','probe','test','verify','train','refresh','deploy','backup','prompt-profile','final','evidence','rehearse','try-probe'):
+            elif action in ('connect','inspect','vision','review-probe','probe','test','verify','train','refresh','deploy','backup','prompt-profile','load-own','final','evidence','rehearse','try-probe'):
                 if not STATE['rooms'][0] and not STATE['noc'].get('playtest') and action not in ('connect','refresh'):raise ValueError('Restore Room 1 before running the caretaker. You can explore this room first.')
                 launch_noc(action,b)
             else:raise ValueError('Unknown caretaker action.')

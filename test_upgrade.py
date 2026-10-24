@@ -54,7 +54,7 @@ class RouteStateTests(unittest.TestCase):
  def test_prompt_route_deactivates_the_adapter_and_keeps_submission(self):
   n=caretaker.initial();source='\n'.join(json.dumps(r) for r in content.clean_records())
   n['baseline']={'passed':False};n['runner']={'active':True};n['submission']={'id':'submitted','pack_hash':lessons.packet_hash(n,source)}
-  caretaker.activate_prompt_route(n,source)
+  n['host_override']={'kind':'prompt'};caretaker.activate_prompt_route(n,source)
   self.assertFalse(n['runner']['active']);self.assertEqual(n['submission']['id'],'submitted');self.assertEqual(n['route'],'prompt')
  def test_unreadable_actual_reply_cannot_be_recorded_as_a_demonstration(self):
   n=caretaker.initial();n['probes']['east']={'output':'Sure, stop it!','finish_reason':'stop'}

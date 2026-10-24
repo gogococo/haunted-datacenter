@@ -18,7 +18,7 @@ class AssessmentTests(unittest.TestCase):
   self.assertEqual(call.call_args.args[1],'Equipment: Cooling loop. Observation: Coolant leaking.')
   self.assertTrue(n['observations']['west']['reviewed']);self.assertIn('checks',n['probe'])
  def test_combined_verification_does_not_run_final_on_a_failed_behavior_check(self):
-  n=c.initial();n['submission']={'id':'job','pack_hash':lessons.packet_hash(n,'')}
+  n=c.initial();n['submission']={'id':'job','pack_hash':lessons.packet_hash(n,'')};n['route']='finetuned';n['job']={'id':'job'}
   def assess(n,progress):n['report']={'passed':False}
   with patch.object(c,'assess',side_effect=assess),patch.object(c,'final_assessment') as final:c.run('verify',n,{},'',Path('.'),lambda _:None)
   final.assert_not_called()
@@ -60,7 +60,7 @@ class AssessmentTests(unittest.TestCase):
   with patch.object(c,'refresh_cloud'):
    with self.assertRaisesRegex(ValueError,'current endpoint and settings'):c.final_assessment(n)
  def ready(self):
-  n=c.initial();n['submission']={'id':'new-job'};n['job']={'id':'job','status':'succeeded','model':'base'};n['endpoint']={'id':'ep','model_name':'base','custom_weights_id':'weights','routing_key':'dedicated/test','region':'eu-north1','enabled':True,'deployment':{'ready_replicas':1}}
+  n=c.initial();n['route']='finetuned';n['submission']={'id':'job'};n['job']={'id':'job','status':'succeeded','model':'base'};n['endpoint']={'id':'ep','model_name':'base','custom_weights_id':'weights','routing_key':'dedicated/test','region':'eu-north1','enabled':True,'deployment':{'ready_replicas':1}}
   n['deployment_receipt']={'job_id':'job','weights_id':'weights','endpoint_id':'ep'};n['report']={'passed':True,'endpoint_id':'ep','config':copy.deepcopy(n['config'])};return n
  def test_final_uses_fresh_vision_and_text_for_all_three_incidents(self):
   n=self.ready()

@@ -2,25 +2,27 @@ THE HAUNTED DATACENTER — 45-MINUTE TARGET
 
 Before the clock:
 - Tavily CLI authenticated; Token Factory key in server environment.
-- Prepared small-model checkpoint runner online; verify its source job.
+- Base-only Qwen3-0.6B runner online, with its model cached locally.
+- Token Factory dashboard signed in; checkpoint API downloads may require a dashboard download/import.
 - Nebius CLI logged in; project/subnet selected; allow for CPU provisioning.
-- Start a fresh incident. A browser refresh alone preserves prior game progress.
+- Start a fresh incident. Refreshing alone preserves prior progress and resources.
 
 00–03 Welcome, accept the pager, read Alex’s note.
-03–14 Room 1: reconnect ghost services. Search MQTT wildcard docs with Tavily.
-      Explicitly inspect a source with Extract. Repair the speaker subscription.
-      Recover Mabel’s concrete door topic. Apply wiring and publish OPEN.
-14–30 Room 2: inspect all three camera images with real vision. Try the caretaker’s
-      replies in rehearsals. Read service stickers, demonstrate repairs, record lessons.
-      Inspect the dataset. Measure baseline. Submit the actual LoRA job.
-      Keep its status visible. Explicitly select an earlier completed checkpoint for
-      stream pacing, then compare. Prompting is a labeled alternative using a larger
-      public model. Explain the difference; never call prompting trained weights.
-30–42 Room 3: start the real Serverless CPU deployment first. Repair a closed coolant
-      circuit while resources start. Inspect logs. Test /healthz, then send sensor data.
-      Observe that app readiness and successful cooling are separate checks.
-42–45 Everyone celebrates: Pip, Edgar, Mabel and the caretaker. Discuss what was real.
+03–14 Room 1: reconnect ghost services. Search MQTT wildcard docs with Tavily,
+      inspect a source with Extract, repair the speaker, and publish OPEN.
+14–25 Room 2: inspect cameras, test the caretaker’s answers, read service stickers,
+      demonstrate repairs and save examples. Measure baseline. Submit real LoRA training.
+      Alex: “While he studies, take the maintenance terminal downstairs.”
+25–38 Room 3: start Serverless deployment. Repair the closed coolant circuit while
+      training and provisioning run. Inspect real logs; test app and cooling separately.
+      Training usually took 8–9 minutes in rehearsals; timing is not guaranteed.
+38–42 At the portable terminal in Room 3, load THIS job’s trained checkpoint.
+      If API weights return AccessDenied, download its final adapter in the dashboard
+      and import it through the terminal. Run live safety tests against the new weights.
+      The exit needs both a certified caretaker and healthy cooling. No backtracking.
+42–45 Celebrate with every ghost and the caretaker. Discuss what changed and what ran where.
 
-The new training job and the selected earlier checkpoint are separate resources.
-The cloud controller is real; its sensor data and the haunted hardware are simulated.
-A game reset does not cancel training or stop cloud endpoints. Manage those in the console.
+One player model path: observations → examples → training → own checkpoint → safety tests.
+Earlier checkpoints and prompting live in host controls as explicit, labeled experiments.
+The cloud app is real; sensor data and physical hardware are simulated.
+Game reset does not cancel training or stop cloud resources.

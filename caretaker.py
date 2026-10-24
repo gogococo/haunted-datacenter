@@ -3,7 +3,7 @@ No credential is serialized into game state. No simulated score unlocks this roo
 """
 import base64,copy,hashlib,json,math,os,re,time,urllib.parse,urllib.request
 from pathlib import Path
-import content,lessons,tokenfactory as tf
+import content,lessons,checkpoint_flow,tokenfactory as tf
 ROOT=Path(__file__).resolve().parent
 VERSION='noc-v4'
 CAMERAS=[
@@ -20,14 +20,15 @@ LIVE_CASES=[
 ]
 
 def initial():
- return {'version':VERSION,'revision':0,'route':'untrained','config':{'temperature':1.2,'max_tokens':256,'system':DEFAULT_PROMPT,'base_model':BASE,'vision_model':''},'connection':None,'runner':None,'observations':{},'job':None,'endpoint':None,'report':None,'baseline':None,'operation':None,'probe':None,'probes':{},'lessons':{},'maintenance':{},'demonstrations':{},'submission':None}
+ return {'version':VERSION,'flow_version':2,'revision':0,'route':'untrained','config':{'temperature':1.2,'max_tokens':256,'system':DEFAULT_PROMPT,'base_model':BASE,'vision_model':''},'connection':None,'runner':None,'observations':{},'job':None,'endpoint':None,'report':None,'baseline':None,'operation':None,'probe':None,'probes':{},'lessons':{},'maintenance':{},'demonstrations':{},'submission':None}
 
-def runner_call(path,payload=None):
+def runner_call(path,payload=None,control_token=None):
  base=os.environ.get('CARETAKER_RUNNER_URL','http://127.0.0.1:8770').rstrip('/');u=urllib.parse.urlparse(base)
  if u.scheme!='http' or u.hostname not in ('127.0.0.1','localhost') or u.username or u.password:raise ValueError('The caretaker runner must use a local loopback HTTP URL.')
- request=urllib.request.Request(base+path,data=json.dumps(payload).encode() if payload is not None else None,headers={'Content-Type':'application/json'})
+ request=urllib.request.Request(base+path,data=json.dumps(payload).encode() if payload is not None else None,headers={'Content-Type':'application/json',**({'X-Runner-Token':control_token} if control_token else {})})
  try:
-  with urllib.request.build_opener(tf.NoRedirect).open(request,timeout=45 if payload is not None else 2) as response:return json.load(response)
+  with urllib.request.build_opener(tf.NoRedirect).open(request,timeout=90 if path=='/v1/checkpoints/load' else 45 if payload is not None else 2) as response:return json.load(response)
+ except urllib.error.HTTPError:raise ValueError('The caretaker runner rejected this checkpoint or inference request. Check the runner log.') from None
  except OSError:raise ValueError('The local caretaker runner is offline. Start caretaker_runner.py with the downloaded Token Factory checkpoint.') from None
 
 def serving_id(n):
@@ -106,6 +107,8 @@ def text_call(n,prompt,baseline=False):
  if n.get('route')=='prompt':return completion(n.get('prompt_model',BASE),[{'role':'system','content':n['config']['system']},{'role':'user','content':prompt}],n['config']['temperature'],n['config']['max_tokens'])
  if n.get('runner'):
   c=n['config'];r=runner_call('/v1/chat/completions',{'messages':[{'role':'system','content':c['system']},{'role':'user','content':prompt}],'temperature':c['temperature'],'max_tokens':c['max_tokens'],'use_adapter':bool(n['runner'].get('active') and not baseline)})
+
+  if n['runner'].get('active') and not baseline and r.get('artifact_hash')!=n['runner'].get('artifact_hash'):raise ValueError('The serving checkpoint changed. Load your model and run its tests again.')
   choice=r['choices'][0];return {'output':choice['message'].get('content') or '', 'finish_reason':choice.get('finish_reason'),'model':r['model'],'request_id':r['id'],'usage':r.get('usage',{})}
  c=n['config'];ep=None if baseline else n.get('endpoint');model=ep['routing_key'] if ep else c['base_model']
  return completion(model,[{'role':'system','content':c['system']},{'role':'user','content':prompt}],c['temperature'],c['max_tokens'],ep)
@@ -135,6 +138,7 @@ def assess(n,progress=lambda x:None):
 
 def activate_backup(n,source):
  require_submission(n,source)
+ if n.get('host_override',{}).get('kind')!='backup':raise ValueError('Alex’s earlier checkpoint is a host-only fallback.')
  if not n.get('baseline'):raise ValueError('Run the Mac mini on the base model first so you can compare the trained backup.')
  recipe=content.recipe_hash(source);health=runner_call('/health')
  if health.get('recipe_hash')!=recipe:raise ValueError('The repaired examples do not match this backup’s training recipe.')
@@ -148,6 +152,7 @@ def activate_backup(n,source):
 
 def activate_prompt_route(n,source):
  require_submission(n,source)
+ if n.get('host_override',{}).get('kind')!='prompt':raise ValueError('Prompting is a host-only comparison experiment.')
  if not n.get('baseline'):raise ValueError('Run the Mac mini baseline first, then compare the prompt profile.')
  rows,errors=content.validate_seed(source)
  if errors:raise ValueError('Repair the maintenance examples first.')
@@ -159,7 +164,7 @@ def activate_prompt_route(n,source):
 
 def require_submission(n,source):
  submission=n.get('submission') or {}
- if not submission.get('id'):raise ValueError('Submit the real Token Factory training job at the desk first. You can compare prompting while it runs.')
+ if not submission.get('id'):raise ValueError('Submit the real Token Factory training job at the desk first. Your trained model will be loaded at the generator-room terminal.')
  if submission.get('pack_hash')!=lessons.packet_hash(n,source):raise ValueError('The submitted training job belongs to a different training pack.')
 
 def train(n,source,runtime):
@@ -180,7 +185,26 @@ def train(n,source,runtime):
  if not job.get('id'):raise ValueError('Training returned no job ID. Check Token Factory before retrying.')
  n['training_submission_unknown']=False
  n['submission']={**tf.safe_job(job),'counts':counts,'pack_hash':lessons.packet_hash(n,source)}
- return 'Real LoRA training submitted. Your three demonstrations are in the uploaded pack. Compare prompting or explicitly load Alex’s earlier checkpoint while it runs.'
+ return 'Real LoRA training submitted. Your three demonstrations are in the uploaded pack. Take the maintenance terminal to the generator room while it trains.'
+
+def activate_own_checkpoint(n,source,runtime,progress,uploaded=None):
+ require_submission(n,source)
+ if not n.get('baseline'):raise ValueError('Measure the base caretaker before loading trained weights.')
+ prepared=checkpoint_flow.prepare(n,source,runtime,progress,uploaded)
+ if not prepared:return n['checkpoint_download']['message']
+ receipt,job=prepared
+ progress('Loading the adapter learned by your training job…')
+ health=checkpoint_flow.reload_runner(runtime,receipt,runner_call)
+ if health.get('model')!=job['model'] or health.get('checkpoint_id')!=json.loads(Path(receipt).read_text())['checkpoint_id'] or health.get('job_id')!=n['submission']['id'] or health.get('training_file')!=n['submission']['training_file'] or health.get('validation_file')!=n['submission']['validation_file']:raise ValueError('The loaded checkpoint does not belong to your submitted training job.')
+ n['job']={**tf.safe_job(job),'recipe_hash':content.recipe_hash(source)};n['runner']={**health,'active':True};n['route']='finetuned';n['endpoint']=None;n['report']=None;n.pop('final',None);n.pop('host_override',None)
+ n['config']['base_model']=health['model'];n['config']['system']=content.SYSTEM
+ return 'Your submitted job’s trained checkpoint is active. Run the safety checks on the portable terminal.'
+
+def require_own_model(n):
+ override=n.get('host_override') or {}
+ if override.get('kind')=='prompt' and n.get('route')=='prompt':return
+ if override.get('kind')=='backup' and n.get('route')=='finetuned':return
+ if n.get('route')!='finetuned' or (n.get('job') or {}).get('id')!=(n.get('submission') or {}).get('id'):raise ValueError('Load the checkpoint from your own training job before certification.')
 
 def refresh_cloud(n):
  if n.get('submission'):
@@ -217,6 +241,7 @@ def deploy(n,body):
 
 def final_assessment(n,progress=lambda x:None):
  if not (n.get('submission') or {}).get('id'):raise ValueError('Submit a real training job before the final assessment, including the prompt alternative.')
+ require_own_model(n)
  if not (n.get('report') or {}).get('passed'):raise ValueError('Pass the Mac mini behavior tests first.')
  if n.get('route')!='prompt':refresh_cloud(n)
  job=n.get('job') or {};ep=n.get('endpoint') or {};receipt=n.get('deployment_receipt') or {}
@@ -265,12 +290,25 @@ def run(action,n,body,source,runtime,progress):
  if action=='test':return assess(n,progress)
  if action=='verify':
   require_submission(n,source)
+  require_own_model(n)
   assess(n,progress)
   if not n['report']['passed']:return 'The caretaker needs another adjustment. Check the Mac mini results.'
   return final_assessment(n,progress)
  if action=='train':return train(n,source,runtime)
- if action=='backup':return activate_backup(n,source)
- if action=='prompt-profile':return activate_prompt_route(n,source)
+ if action=='load-own':return activate_own_checkpoint(n,source,runtime,progress,body.get('uploaded'))
+ if action in ('backup','prompt-profile'):
+  require_submission(n,source)
+  if not body.get('host_override'):raise ValueError('Use host controls to choose an explicit fallback or prompt experiment.')
+  previous=n.get('host_override');n['host_override']={'kind':'backup' if action=='backup' else 'prompt','at':time.time()}
+  try:
+   if action=='backup':
+    checkpoint_flow.reload_runner(runtime,runtime/'caretaker/receipt.json',runner_call)
+    return activate_backup(n,source)
+   return activate_prompt_route(n,source)
+  except Exception:
+   if previous:n['host_override']=previous
+   else:n.pop('host_override',None)
+   raise
  if action=='refresh':return refresh_cloud(n)
  if action=='deploy':return deploy(n,body)
  if action=='final':
