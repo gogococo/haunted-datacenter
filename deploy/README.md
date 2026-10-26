@@ -75,7 +75,7 @@ Automated tests use temporary data and mocked cloud operations. Real browser and
 - Host endpoint: `aiendpoint-e00ymr1hqhreq80f96`
 - Persistent filesystem: `computefilesystem-e00ybmwmaz7tm6290n`
 - Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:stream-v1`
-- Checked image manifest: `sha256:29a8d9719c1a1e9c151ae691da29de7594e17fc07f7225e2913a9a5102862ffa`
+- Checked image manifest: `sha256:883ec462bbfe7538836ec00a43bb77abd26ae2e6e3898ecd8c1f3ef423281061`
 
 The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it unlocks presentation shortcuts and model experiments. Normal games use the configured backend integrations without this code.
 
