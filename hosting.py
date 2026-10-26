@@ -1,4 +1,4 @@
-"""Single-host access and durable, server-recorded results. No multiplayer state."""
+"""Optional host tools and durable, server-recorded leaderboard results."""
 import base64, hashlib, hmac, json, math, os, secrets, threading, time, uuid
 from http.cookies import SimpleCookie, CookieError
 from pathlib import Path
@@ -83,3 +83,14 @@ def leaderboard(runtime):
         except (OSError,ValueError,KeyError,TypeError): continue
     rows.sort(key=lambda r:(r['elapsed_seconds'],r['finished_at'],r['run_id']))
     return [{**row,'rank':i+1} for i,row in enumerate(rows[:25])]
+
+_new_shifts={}
+def allow_new_shift(address):
+    now=time.time()
+    with _lock:
+        for key in list(_new_shifts):
+            _new_shifts[key]=[t for t in _new_shifts[key] if now-t<3600]
+            if not _new_shifts[key]:del _new_shifts[key]
+        times=_new_shifts.setdefault(address,[])
+        if len(times)>=30:raise ValueError('Too many new shifts from this connection. Resume an existing UUID or try again later.')
+        times.append(now)

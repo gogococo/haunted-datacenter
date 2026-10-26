@@ -50,6 +50,7 @@ _POOL_LOCK=threading.RLock()
 _RELEASED=set()
 _RELEASE_LOCK=threading.Lock()
 POOL_NAME='haunted-cooling-controller'
+LEASE_TTL=20*60
 ACTIVE_STATES={'RUNNING','STARTING','CREATING','UPDATING','IMAGE_PULLING','PROVISIONING'}
 
 def _write(path,value):
@@ -93,11 +94,45 @@ def _row_settings(row):
     spec=row['spec'];env={x['name']:x.get('value') for x in spec.get('environment_variables',[])}
     return _settings({'port':spec['ports'][0]['container_port'],'target':env['TARGET_C'],'budget':env['MAX_POWER_KW']})
 
-def _remember(p,row,runtime,lease):
+def _leases(pool):
+    now=time.time()
+    leases=pool.get('leases',{}) if pool.get('shared') else ({pool['lease']:now} if pool.get('lease') else {})
+    return {k:v for k,v in leases.items() if isinstance(v,(int,float)) and now-v<LEASE_TTL}
+
+def enable_shared(runtime):
+    """Upgrade the old single-shift receipt without allocating cloud resources."""
+    with lifecycle_lock(runtime):
+        pool=_read(_pool_path(runtime))
+        if pool and not pool.get('shared') and pool.get('project_id')==config(runtime)['project_id']:
+            pool.update(shared=True,leases=_leases(pool));_write(_pool_path(runtime),pool)
+
+def allow(runtime,lease):
+    with _RELEASE_LOCK:_RELEASED.discard((str(runtime.resolve()),lease))
+
+def touch(runtime,lease):
+    # Polls must not block on a slow create/stop CLI request.
+    if not _POOL_LOCK.acquire(blocking=False):return
+    try:
+        pool=_read(_pool_path(runtime))
+        if not pool.get('shared') or lease not in pool.get('leases',{}):return
+        if time.time()-pool['leases'][lease]<60:return
+        pool['leases'][lease]=time.time();_write(_pool_path(runtime),pool)
+    finally:_POOL_LOCK.release()
+
+def reap(runtime):
+    pool=_read(_pool_path(runtime))
+    if pool.get('shared') and pool.get('state') not in ('STOPPED','STOPPING') and not _leases(pool):
+        return release(runtime,pool.get('lease'),idle=True)
+
+def _remember(p,row,runtime,lease,shared=False):
     c=config(runtime);identifier=row['metadata']['id'];values=_row_settings(row)
     token=row.get('spec',{}).get('auth_token') or _read(private_path(runtime,identifier)).get('token')
     if not token:raise ValueError('The existing controller has no available private access token. Check its cloud configuration before replacing it.')
     receipt={'id':identifier,'name':row['metadata']['name'],'project_id':c['project_id'],'token':token,**values,'lease':lease,'state':row.get('status',{}).get('state','STARTING')}
+    previous=_read(_pool_path(runtime))
+    if shared or previous.get('shared'):
+        receipt.update(shared=True,leases=_leases(previous))
+        if lease:receipt['leases'][lease]=time.time()
     _write(private_path(runtime,identifier),receipt);_write(_pool_path(runtime),receipt)
     p['endpoint']={**public(row),'config':values,'reused':True};p['deployment_unknown']=False;p['health']=None;p['report']=None
     return receipt
@@ -126,7 +161,7 @@ def _stop(row,runtime):
     if receipt.get('id')==row['metadata']['id']:
         receipt.update(state='STOPPED',cleanup_error=None);_write(_pool_path(runtime),receipt)
 
-def _deploy(p,body,runtime,lease,replace=False):
+def _deploy(p,body,runtime,lease,replace=False,shared=False):
     if _cancelled(runtime,lease):raise ValueError('This shift has ended. The controller was not started.')
     if p.get('deployment_unknown'):raise ValueError('A deployment had an uncertain result. Check Serverless AI in the console before submitting another.')
     c=config(runtime);values=_settings({**(p.get('endpoint') or {}).get('config',{}),**body})
@@ -135,7 +170,7 @@ def _deploy(p,body,runtime,lease,replace=False):
     if replace and not candidates:raise ValueError('There is no game-owned controller to replace.')
     selected=candidates[0] if candidates else None
     if selected:
-        _remember(p,selected,runtime,lease)
+        _remember(p,selected,runtime,lease,shared)
         pending=runtime/'serverless/pending.json'
         if _read(pending).get('name') in {r['metadata']['name'] for r in candidates}:pending.unlink(missing_ok=True)
         # Clean up only positively identified controllers from old game versions.
@@ -143,17 +178,20 @@ def _deploy(p,body,runtime,lease,replace=False):
         for row in candidates[1:]:
             if row.get('status',{}).get('state') in ACTIVE_STATES:_stop(row,runtime)
         if replace and values!=p['endpoint']['config']:
+            if shared or any(id!=lease for id in _leases(_read(_pool_path(runtime)))):
+                raise ValueError('Other playtests share this CPU app. Use the equipment-plate settings to reconnect; this game cannot replace their running controller.')
             _stop(selected,runtime)
             p.setdefault('previous_endpoints',[]).append({**public(selected),'state':'STOPPED'})
         else:
             if values!=p['endpoint']['config']:
+                if shared:raise ValueError('The shared cooling service uses the equipment-plate settings. Correct your configuration and reconnect; other players’ controller stays running.')
                 raise ValueError('Reused controller has a different configuration. Its existing values are shown below. Use “Replace with corrected deployment” to change them; the old CPU stops first.')
             state=p['endpoint']['state']
             if state=='STOPPED':
                 cli(['ai','endpoint','start',p['endpoint']['id'],'--async'])
                 p['endpoint']['state']='STARTING'
                 receipt=_read(_pool_path(runtime));receipt['state']='STARTING';_write(_pool_path(runtime),receipt)
-                return 'Starting the existing cooling controller. Same endpoint, no new CPU allocation. Repair the circuit while it wakes.'
+                return 'Starting the existing cooling controller. Same endpoint, one shared CPU controller. Repair the circuit while it wakes.'
             if state not in ACTIVE_STATES:
                 raise ValueError('The existing controller is '+state+'. Wait for it to stop, then start it again; no extra controller was created.')
             return 'Connected to the existing cooling controller. No new endpoint created. Check HTTP readiness, then test this circuit.'
@@ -162,6 +200,8 @@ def _deploy(p,body,runtime,lease,replace=False):
         # A crash between create and receipt must never trigger a second create.
         if not any(r['metadata']['name']==pending.get('name') for r in candidates):
             raise ValueError('A previous controller create has no confirmed receipt. Check the cloud console before retrying; no duplicate was submitted.')
+    if shared and values!={'port':8000,'target':75.0,'budget':12.0}:
+        raise ValueError('Use the equipment-plate settings before starting the shared service. No controller was created.')
     name=POOL_NAME if not candidates else POOL_NAME+'-'+secrets.token_hex(6)
     token=secrets.token_urlsafe(32)
     args=['ai','endpoint','create','--name',name,'--parent-id',c['project_id'],'--subnet-id',c['subnet_id'],
@@ -176,27 +216,34 @@ def _deploy(p,body,runtime,lease,replace=False):
     identifier=result.get('resource_id') or result.get('resourceId') or result.get('metadata',{}).get('id')
     if not identifier:raise ValueError('Create returned no endpoint ID. Inspect the console; do not submit another deployment.')
     receipt={'id':identifier,'name':name,'token':token,'project_id':c['project_id'],**values,'lease':lease,'state':'STARTING','created_at':time.time()}
+    if shared:receipt.update(shared=True,leases={lease:time.time()} if lease else {})
     _write(private_path(runtime,identifier),receipt);_write(_pool_path(runtime),receipt);pending.unlink(missing_ok=True)
     p['endpoint']={'id':identifier,'name':name,'state':'STARTING','url':'','config':values,'reused':False}
     p['deployment_unknown']=False;p['health']=None;p['report']=None
     return 'First cooling controller submitted to Nebius Serverless. Later shifts reuse this endpoint. Repair the circuit while the container starts.'
 
-def deploy(p,body,runtime,lease=None):
-    with lifecycle_lock(runtime):return _deploy(p,body,runtime,lease)
+def deploy(p,body,runtime,lease=None,shared=False):
+    with lifecycle_lock(runtime):return _deploy(p,body,runtime,lease,shared=shared)
 
-def release(runtime,lease,endpoint=None):
+def release(runtime,lease,endpoint=None,idle=False):
     """Nonblocking cleanup. A stale reset cannot stop a newer shift's lease."""
     if not lease:return
-    with _RELEASE_LOCK:_RELEASED.add((str(runtime.resolve()),lease))
+    if not idle:
+        with _RELEASE_LOCK:_RELEASED.add((str(runtime.resolve()),lease))
     def worker():
         with lifecycle_lock(runtime):
             pool=_read(_pool_path(runtime));project=config(runtime)['project_id']
             try:
+                if idle and _leases(pool):return
                 # Adopt a pre-pool saved incident on its first reset/finish.
                 if not pool and endpoint and private_path(runtime,endpoint['id']).exists():
                     row=cli(['ai','endpoint','get',endpoint['id']])
                     if owned(row,project):pool=_remember({},row,runtime,lease)
-                if not pool or pool.get('lease')!=lease or pool.get('project_id')!=project:return
+                if not pool or pool.get('project_id')!=project:return
+                if pool.get('shared'):
+                    leases=_leases(pool);leases.pop(lease,None);pool['leases']=leases;_write(_pool_path(runtime),pool)
+                    if leases:return
+                elif pool.get('lease')!=lease:return
                 row=cli(['ai','endpoint','get',pool['id']])
                 if not owned(row,project):raise ValueError('Controller ownership could not be verified. No resource was stopped.')
                 pool.update(state='STOPPING',cleanup_error=None);_write(_pool_path(runtime),pool)
@@ -258,6 +305,6 @@ def logs(p,runtime):
     p['cloud_logs']=result.stdout.replace(receipt['token'],'[REDACTED]')[-6000:]
     return 'Actual container logs retrieved from Nebius Serverless.'
 
-def replace(p,body,runtime,lease=None):
+def replace(p,body,runtime,lease=None,shared=False):
     if not p.get('endpoint'):raise ValueError('There is no deployment to replace.')
-    with lifecycle_lock(runtime):return _deploy(p,body,runtime,lease,replace=True)
+    with lifecycle_lock(runtime):return _deploy(p,body,runtime,lease,replace=True,shared=shared)

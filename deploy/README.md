@@ -1,8 +1,8 @@
 # Stream hosting
 
-One host controls one shared incident. Viewers discuss the solution on stream. Co-op clicking, independent visitor games and state synchronization are future work.
+Players start separate games without a host code. Each gets a random UUIDv4 and a private resume link. The UUID is a bearer secret: anyone with it can resume that game. It is never listed by the leaderboard. A browser remembers its last UUID; an explicit `?run=<UUID>` URL keeps tabs on different saves independent. Shared co-op interactions remain future work.
 
-The welcome screen takes a display name. Each fresh incident has a UUID, visible in Host controls. Refreshing or reconnecting resumes the current incident. Resetting creates a new UUID without deleting previous scores. It stops the reusable cooling controller without deleting its configuration.
+State, per-game CSRF tokens, training packs and checkpoints live in `GAME_DATA_DIR/runs/<UUID>/`. Scores and cloud-controller receipts remain shared at the data root. Starting over creates a new UUID and keeps the old save. The original host incident stays at the data root and remains resumable by its existing UUID, so the upgrade does not move its training artifacts.
 
 ## Persistent leaderboard
 
@@ -34,7 +34,7 @@ Room 3 additionally needs authenticated Nebius CLI access. For an unattended con
 
 Build a Linux amd64 image and push it to the project's private registry. The `.dockerignore` is an allowlist: no local runtime, environment files, model adapters, or cloud credentials enter the build context. The public Qwen base model is fetched at a pinned revision during build.
 
-Create a CPU Serverless AI endpoint exposing **8080**, initially **cpu-d3 / 4vcpu-16gb**, with 30 GiB container disk. Mount a dedicated persistent filesystem at **`/app/runtime-data`**. Keep one instance: this release intentionally has one host and one incident.
+Create a CPU Serverless AI endpoint exposing **8080**, initially **cpu-d3 / 4vcpu-16gb**, with 30 GiB container disk. Mount a dedicated persistent filesystem at **`/app/runtime-data`**. Keep one application instance: it serves independent player saves from the same volume. Request locks and background jobs are scoped to each UUID.
 
 Ordinary environment variables:
 
@@ -51,16 +51,18 @@ SecretStash-injected environment variables:
 
 The bootstrap prepares the dedicated volume, drops to uid 1000, configures the service-account CLI profile, starts the loopback-only model runner and then the HTTP app. It reloads the active persisted checkpoint on a container replacement. `/healthz` is available after startup. Provider keys remain on the backend.
 
-The game uses its own host-code sign-in with an HttpOnly, SameSite=Strict cookie. Only the leaderboard, health and static assets are public. Cost-bearing operations, game progress and host controls require the signed host session and current game token. Retired Python editor/execution routes are disabled in public hosting.
+Normal players need a UUID save and its per-game request token, supplied automatically by the UI. Host-code sign-in is only for optional presentation tools, prepared checkpoints and prompt experiments; its cookie is HttpOnly and SameSite=Strict. New-shift creation is limited to 30 per connection per hour, and training submission remains once per game. Retired Python execution routes stay disabled in public hosting. Provider credentials never reach the browser.
 
 Cloudflare's `haunted-datacenter-edge` Worker connects only `halloween.curiousjaxx.dev` to the Nebius HTTPS upstream. It forwards the host session cookie, rejects foreign browser origins, disables caching and translates the exact app origin for the backend check. Its source has only public routing configuration. The existing Cube demo is separate.
 
-Endpoint-secret references pin a SecretStash version. To change credentials, create a new version and replace the endpoint with the same persistent filesystem. Do not delete that filesystem. Finishing or resetting asynchronously stops the game’s cooling controller to release CPU. Later shifts start and reuse that endpoint; training jobs continue independently. A configuration change stops the old controller before provisioning its replacement. The host uses 4 vCPUs; the cooling app uses 2 vCPUs only while its endpoint runs. The private pool receipt lives at `GAME_DATA_DIR/serverless/controller.json`; it survives game resets. Discovery verifies the project, game resource name and controller container before reusing or stopping a resource. Other demos are never selected. Keep one active game host per project; local and hosted copies should not run simultaneous shifts against the same controller. Stopped endpoints retain their disk/configuration; remove obsolete stopped resources in Nebius if no longer needed. If a stop fails, the next Room 3 visit shows the cleanup error; inspect it in the console.
+Endpoint-secret references pin a SecretStash version. To change credentials, create a new version and replace the endpoint with the same persistent filesystem. Do not delete that filesystem. Finishing or starting over releases only that UUID’s cooling-controller lease. The controller stops after the last active lease is released. Abandoned browser leases expire after 20 minutes and a minute-interval sweep stops an unused controller. An open game that has claimed the controller keeps its lease alive; returning after expiry can wake the same endpoint. Public games share its equipment-plate configuration and cannot replace another player’s controller. Training jobs continue independently.
+
+The app uses 4 vCPUs; one shared cooling controller uses 2 vCPUs while running. No additional CPU model server or cooling endpoint is created per player. The private pool receipt is `GAME_DATA_DIR/serverless/controller.json`; only verified game-owned resources are reused or stopped. Keep one active application deployment per Nebius project. If a stop fails, the cooling panel shows the cleanup error. The model runner serializes adapter loading and inference, restoring each UUID’s own checkpoint before its test. A busy runner can queue tests without mixing models.
 
 ## Verification
 
 ```sh
-GAME_DATA_DIR=$(mktemp -d) python3 -m unittest -q test_game test_caretaker test_plant test_upgrade test_checkpoint_flow test_hosting test_serverless
+GAME_DATA_DIR=$(mktemp -d) python3 -m unittest -q test_game test_caretaker test_plant test_upgrade test_checkpoint_flow test_hosting test_serverless test_sessions
 node --test deploy/cloudflare/test-worker.mjs
 ```
 
@@ -75,6 +77,6 @@ Automated tests use temporary data and mocked cloud operations. Real browser and
 - Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:stream-v1`
 - Checked image manifest: `sha256:59426daf755bd89b6f06f271e73f3706a3da1e4b8641acffec0072c851347fa0`
 
-The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it authorizes new training jobs and cooling endpoint creation using the backend account.
+The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it unlocks presentation shortcuts and model experiments. Normal games use the configured backend integrations without this code.
 
-The October 26 release verification passed 120 Python tests and four edge tests. The controller reuse update passed 135 Python tests and the four edge tests. Its lifecycle tests check wake/reuse, stop-on-reset/finish, configuration replacement, private receipts, quota errors and stale-cleanup races. A real cloud smoke run completed Room 1 with live Tavily Search + Extract, connected to Token Factory, inspected the cooling camera with its vision endpoint and received a real CPU caretaker response. An isolated container check loaded an actual trained adapter, verified the learned repair, then restored the adapter, incident name/UUID and private fixture leaderboard after restart. These checks do not claim a new full cloud training-and-escape playthrough.
+The UUID-save update passed 154 Python tests and four edge tests. Separate players and tab resumes were verified in a browser, and both saves survived a real process restart. Earlier release checks passed 120 Python tests, followed by 135 for controller reuse. Its lifecycle tests check wake/reuse, stop-on-reset/finish, configuration replacement, private receipts, quota errors and stale-cleanup races. A real cloud smoke run completed Room 1 with live Tavily Search + Extract, connected to Token Factory, inspected the cooling camera with its vision endpoint and received a real CPU caretaker response. An isolated container check loaded an actual trained adapter, verified the learned repair, then restored the adapter, incident name/UUID and private fixture leaderboard after restart. These checks do not claim a new full cloud training-and-escape playthrough.

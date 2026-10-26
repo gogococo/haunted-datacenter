@@ -25,7 +25,9 @@ def download(file_id,destination,expected_bytes):
  Path(destination).write_bytes(data)
 
 def runner_config(runtime):
- path=Path(os.environ.get('CARETAKER_RUNNER_CONTROL',str(runtime/'caretaker/runner-control.json')))
+ runtime=Path(runtime)
+ shared=runtime.parent.parent if runtime.parent.name=='runs' else runtime
+ path=Path(os.environ.get('CARETAKER_RUNNER_CONTROL',str(shared/'caretaker/runner-control.json')))
  try:return json.loads(path.read_text())
  except (OSError,ValueError):raise ValueError('Restart the updated caretaker runner to enable loading your new checkpoint.') from None
 

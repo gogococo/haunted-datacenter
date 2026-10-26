@@ -83,3 +83,5 @@
 #leaderboard-dialog{max-width:700px}
 
 @media(max-width:760px){.welcome-copy form{margin-inline:auto}.welcome-copy form button{justify-self:center}}
+
+.shift-options{display:flex;gap:10px;margin:24px 0 18px}.shift-options button{flex:1}.welcome-copy #start-run-form,.welcome-copy #resume-run-form{display:grid;gap:10px}.welcome-copy input{min-width:0;width:100%}#save-game{max-width:650px}#save-game code{display:block;margin:18px 0;overflow-wrap:anywhere}#save-game label{display:block;margin:18px 0 8px}#saved-link{width:100%;margin-bottom:18px}#host-login-form{display:grid;gap:10px;margin:16px 0}[hidden]{display:none!important}

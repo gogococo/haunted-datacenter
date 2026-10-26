@@ -70,5 +70,5 @@ document.addEventListener('click',async e=>{
  const file=$('#noc-checkpoint-file')?.files[0];if(!file){toast('Choose this job’s final adapter_model.safetensors first.',true);return}
  if(file.size>64*1024*1024){toast('Choose a LoRA adapter under 64 MiB.',true);return}
  button.disabled=true;button.textContent='Importing your checkpoint…';
- try{const r=await fetch('/api/noc/import',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Game-Token':state.token},body:file});const data=await r.json();if(!r.ok)throw Error(data.error||'Import failed');state=data.state;render()}catch(error){toast(error.message,true)}finally{button.disabled=false}
+ const importRun=runId;try{const r=await fetch('/api/noc/import',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Game-Token':state.token,'X-Run-ID':runId||state.run_id},body:file});const data=await r.json();if(!r.ok)throw Error(data.error||'Import failed');if(runId===importRun){state=data.state;render()}}catch(error){toast(error.message,true)}finally{button.disabled=false}
 });

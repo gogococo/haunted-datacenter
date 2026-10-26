@@ -46,14 +46,14 @@ class HostedHTTPTests(unittest.TestCase):
         req=urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,headers=headers)
         with urllib.request.urlopen(req) as r:return json.load(r),dict(r.headers)
     def login(self):return self.request('/api/login',{'code':'test-host-access-code'})[1]['Set-Cookie'].split(';')[0]
-    def test_host_cookie_is_required_for_state_and_mutations(self):
-        data,_=self.request('/api/state');self.assertEqual(set(data),{'authenticated','hosted'})
+    def test_host_cookie_selects_original_save_without_a_uuid(self):
+        data,_=self.request('/api/state');self.assertFalse(data['has_session']);self.assertFalse(data['is_host'])
         with self.assertRaises(urllib.error.HTTPError) as e:self.request('/api/start',{'name':'Alex'})
         self.assertEqual(e.exception.code,401)
         cookie=self.login();data,_=self.request('/api/state',cookie=cookie);self.assertTrue(data['authenticated'])
         data,_=self.request('/api/start',{'name':'Alex'},cookie);self.assertEqual(data['state']['player_name'],'Alex')
     def test_forged_cookie_and_legacy_execution_are_rejected(self):
-        self.assertFalse(self.request('/api/state',cookie='haunted_host=forged.bad')[0]['authenticated'])
+        self.assertFalse(self.request('/api/state',cookie='haunted_host=forged.bad')[0]['is_host'])
         with self.assertRaises(urllib.error.HTTPError) as e:self.request('/api/check',{'kind':'retry','source':'raise Exception()'},self.login())
         self.assertEqual(e.exception.code,403)
     def test_public_leaderboard_does_not_expose_control_state(self):

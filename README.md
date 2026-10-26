@@ -1,8 +1,8 @@
 # Escape the Haunted Datacenter
 
-A Halloween coding escape room for a 45-minute livestream: haunted infrastructure, questionable maintenance notes and three rooms to escape. One host controls the mouse and keyboard while friends or viewers help solve. Verified escapes earn a place on the persistent leaderboard.
+A Halloween coding escape room for a 45-minute livestream: haunted infrastructure, questionable maintenance notes and three rooms to escape. One person controls each game while friends or viewers help solve; different players can keep separate games. Verified escapes earn a place on the persistent leaderboard.
 
-**[Open the hosted demo](https://halloween.curiousjaxx.dev/)** — a host access code is required to control the game.
+**[Open the hosted demo](https://halloween.curiousjaxx.dev/)** — enter your name to start your own game. No host code is needed.
 
 ## Run locally
 
@@ -38,9 +38,9 @@ You need Python 3.12, the Nebius CLI authenticated to a project with Serverless 
    python server.py
    ```
 
-Open **http://127.0.0.1:8765**, enter a display name and choose **Start shift** or **Resume shift**. Progress, checkpoints and scores are saved in the ignored `.runtime/` directory. Keep keys server-side and out of Git.
+Open **http://127.0.0.1:8765**, enter a display name and choose **Start shift** or **Resume shift**. Each game gets a UUID and private resume link; keep either to continue in another browser. Progress and checkpoints live in `.runtime/runs/<UUID>/`, with a shared persistent leaderboard. Keep keys server-side and out of Git.
 
-The first playthrough creates a real cooling-controller endpoint; later shifts reuse it. Finishing or resetting stops that controller to release CPU, while preserving scores. Training jobs continue independently; manage them in Token Factory. For Docker and cloud hosting, see the [deployment guide](deploy/README.md).
+Playthroughs share one real cooling-controller endpoint. Finishing or starting over releases your game’s share; it stops when nobody else is using it. Starting over keeps your previous UUID save and scores. Training jobs continue independently; manage them in Token Factory. For Docker and cloud hosting, see the [deployment guide](deploy/README.md).
 
 ## The rooms
 
@@ -52,16 +52,16 @@ The first playthrough creates a real cooling-controller endpoint; later shifts r
 
 ```mermaid
 flowchart TD
-    Browser[Host browser] --> Edge[Cloudflare Worker<br/>halloween.curiousjaxx.dev]
+    Browser[Player browsers · independent UUID saves] --> Edge[Cloudflare Worker<br/>halloween.curiousjaxx.dev]
     Edge --> Game[Nebius Serverless AI CPU endpoint<br/>Web UI, Python API and caretaker runner]
     Game -->|Search and Extract| Tavily[Tavily]
     Game -->|Vision inference and LoRA training| TF[Token Factory]
     TF -->|Trained adapter| Game
     Game -->|Create once, start/stop and call| Cooling[Separate Serverless AI CPU endpoint<br/>Room 3 control application]
-    Game --> Storage[Persistent filesystem<br/>Progress, checkpoints and leaderboard]
+    Game --> Storage[Persistent filesystem<br/>Per-UUID saves, checkpoints and leaderboard]
     Secrets[SecretStash<br/>Runtime credentials] -.-> Game
 ```
 
 Token Factory handles vision inference and training; the trained text model runs in the game's own model runner, inside the hosted app or on your computer during local play. Room 3's control service runs in a separate cloud endpoint. The building, broker traffic and sensor readings are simulated; the web research, model calls, training and cloud deployments are real.
 
-Locally, the browser connects directly to the Python server, with the same external service integrations. The hosted release runs one host-controlled incident; shared co-op interactions are planned.
+Locally, the browser connects directly to the Python server, with the same external service integrations. Players have independent progress and training jobs. The CPU runner serializes model tests and restores each player’s own adapter; it does not provision a model server per player. Shared co-op clicking and synchronization are still planned.

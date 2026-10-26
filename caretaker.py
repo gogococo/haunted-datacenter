@@ -1,7 +1,7 @@
 """Room 2: real Token Factory operations and a small measured assessment.
 No credential is serialized into game state. No simulated score unlocks this room.
 """
-import base64,copy,hashlib,json,math,os,re,time,urllib.parse,urllib.request
+import base64,copy,hashlib,json,math,os,re,time,urllib.parse,urllib.request,threading
 from pathlib import Path
 import content,lessons,checkpoint_flow,tokenfactory as tf
 ROOT=Path(__file__).resolve().parent
@@ -74,7 +74,8 @@ def connect(n):
  if not n['config']['vision_model'] and vision:n['config']['vision_model']=vision[0]
  try:
   health=runner_call('/health');active=bool((n.get('runner') or {}).get('active') and n['runner'].get('artifact_hash')==health['artifact_hash'])
-  n['runner']={**health,'active':active};n['config']['base_model']=health['model'];n.pop('runner_problem',None)
+  n['runner']={**health,'active':True} if active else {**{k:health[k] for k in ('ready','model','device') if k in health},'active':False,'has_adapter':False,'artifact_hash':'base:'+health['model']}
+  n['config']['base_model']=health['model'];n.pop('runner_problem',None)
  except ValueError as error:n['runner_problem']=str(error)
  return 'Connected to Token Factory. Camera and caretaker models are available.'
 
@@ -266,7 +267,7 @@ def final_assessment(n,progress=lambda x:None):
  n['final']={'passed':all(all(r['checks'].values()) for r in results),'results':results,'at':time.time()}
  return 'Caretaker restored. The exit is released.' if n['final']['passed'] else 'The camera-to-caretaker test needs another repair. Inspect the final results.'
 
-def run(action,n,body,source,runtime,progress):
+def _run(action,n,body,source,runtime,progress):
  if action=='connect':return connect(n)
  if action=='evidence':
   lessons.evidence(n,body.get('camera'));return 'Maintenance evidence added to the rehearsal.'
@@ -302,7 +303,7 @@ def run(action,n,body,source,runtime,progress):
   previous=n.get('host_override');n['host_override']={'kind':'backup' if action=='backup' else 'prompt','at':time.time()}
   try:
    if action=='backup':
-    checkpoint_flow.reload_runner(runtime,runtime/'caretaker/receipt.json',runner_call)
+    checkpoint_flow.reload_runner(runtime,(runtime.parent.parent if runtime.parent.name=='runs' else runtime)/'caretaker/receipt.json',runner_call)
     return activate_backup(n,source)
    return activate_prompt_route(n,source)
   except Exception:
@@ -315,3 +316,25 @@ def run(action,n,body,source,runtime,progress):
   require_submission(n,source)
   return final_assessment(n,progress)
  raise ValueError('Unknown caretaker action.')
+
+# A single CPU model runner serves all UUID saves. Serialize adapter selection
+# with inference so one player's model cannot leak into another player's test.
+RUNNER_LOCK=threading.RLock()
+def run(action,n,body,source,runtime,progress):
+ if action not in ('connect','inspect','review-probe','probe','test','verify','load-own','backup','final'):
+  return _run(action,n,body,source,runtime,progress)
+ progress('Waiting for the shared caretaker CPU…')
+ with RUNNER_LOCK:
+  if (n.get('runner') or {}).get('active') and n.get('route')=='finetuned' and action not in ('load-own','backup'):
+   health=runner_call('/health')
+   if health.get('artifact_hash')!=n['runner'].get('artifact_hash'):
+    job=(n.get('job') or {}).get('id','')
+    receipt=runtime/'noc-checkpoints'/hashlib.sha256(job.encode()).hexdigest()[:20]/'receipt.json'
+    if n.get('host_override',{}).get('kind')=='backup':
+     shared=runtime.parent.parent if runtime.parent.name=='runs' else runtime
+     receipt=shared/'caretaker/receipt.json'
+    progress('Restoring this shift’s trained caretaker on the shared CPU…')
+    restored=checkpoint_flow.reload_runner(runtime,receipt,runner_call)
+    if restored.get('artifact_hash')!=n['runner'].get('artifact_hash') or restored.get('job_id')!=job:
+     raise ValueError('The runner did not load this shift’s verified checkpoint.')
+  return _run(action,n,body,source,runtime,progress)
