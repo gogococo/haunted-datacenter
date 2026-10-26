@@ -88,6 +88,6 @@ class CloudControllerTests(unittest.TestCase):
   row={'metadata':{'id':'ep','name':'app'},'spec':{'auth_token':'secret'},'status':{'state':'RUNNING','public_endpoints':['https://app.example']}}
   self.assertNotIn('secret',json.dumps(serverless.public(row)))
  def test_uncertain_deployment_is_not_resubmitted(self):
-  with patch.object(serverless,'cli') as cli,self.assertRaisesRegex(ValueError,'uncertain'):serverless.deploy({'deployment_unknown':True},{},Path('.'))
+  with tempfile.TemporaryDirectory() as tmp,patch.object(serverless,'cli') as cli,self.assertRaisesRegex(ValueError,'uncertain'):serverless.deploy({'deployment_unknown':True},{},Path(tmp))
   cli.assert_not_called()
 if __name__=='__main__':unittest.main()
