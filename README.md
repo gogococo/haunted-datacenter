@@ -54,7 +54,7 @@ Alex's old checkpoint and the larger-model prompt comparison are **host-only ove
 
 Tooltips explain generation settings. The portable terminal compares correctness, JSON schema, completion, brevity and consistency. Its final assessment makes three fresh vision calls and sends the actual observed descriptions to the trained text model. Both the caretaker certificate and the real cloud cooling test are required at the final exit.
 
-**Serving boundary:** vision and training use Token Factory. The small LoRA text model runs locally. Room 3 deploys the real application on Nebius Serverless AI. This POC does not claim a new Token Factory-hosted text endpoint.
+**Serving boundary:** vision and training use Token Factory. The small LoRA text model runs in the game’s CPU runner: on your computer for local play, or inside the app’s Nebius CPU endpoint when hosted. Room 3 deploys the real application on Nebius Serverless AI. This POC does not claim a new Token Factory-hosted text endpoint.
 
 ### Start the local model runner
 

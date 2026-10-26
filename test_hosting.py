@@ -58,6 +58,9 @@ class HostedHTTPTests(unittest.TestCase):
         self.assertEqual(e.exception.code,403)
     def test_public_leaderboard_does_not_expose_control_state(self):
         self.assertEqual(self.request('/api/leaderboard')[0],{'entries':[]})
+    def test_malformed_login_body_does_not_start_a_run(self):
+        with self.assertRaises(urllib.error.HTTPError) as e:self.request('/api/login',[])
+        self.assertEqual(e.exception.code,401);self.assertIsNone(server.STATE['started'])
     def test_login_cookie_is_secure_and_expired_cookie_fails(self):
         _,headers=self.request('/api/login',{'code':'test-host-access-code'});cookie=headers['Set-Cookie']
         for attribute in ['HttpOnly','Secure','SameSite=Strict']:self.assertIn(attribute,cookie)

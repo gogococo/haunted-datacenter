@@ -1,4 +1,4 @@
-let state, route = location.hash.slice(1) || 'overview', drafts = {}, lastTraining, hintText = {}, timer;
+let state, route = location.hash.slice(1) || 'overview', drafts = {}, lastTraining, hintText = {}, timer, refreshVersion = 0;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ghost = `<svg class="operator-ghost" viewBox="0 0 40 46" fill="none" aria-hidden="true"><path d="M7 40V18a13 13 0 0 1 26 0v22l-6-4-7 5-7-5-6 4Z" fill="#c2d2a5" stroke="#6a8053"/><ellipse cx="15" cy="20" rx="2" ry="3" fill="#536b42"/><ellipse cx="25" cy="20" rx="2" ry="3" fill="#536b42"/><path d="M16 29q4 4 8 0" stroke="#6a8053"/></svg>`;
@@ -54,5 +54,5 @@ document.addEventListener('click',async e=>{const target=e.target.closest('butto
  else if(id==='escape'){await api('escape',{sequence:[1,2,3].map(n=>$('#seq-'+n).value)});render();window.scrollTo(0,0)}
  }catch(err){toast(err.message,true)}finally{target.disabled=false}});
 window.addEventListener('hashchange',()=>{let next=location.hash.slice(1)||'overview';if(!['overview','1','2','3'].includes(next))next='overview';if(next!==route)inspected=null;route=next;render()});
-async function refresh(){try{const r=await fetch('/api/state');if(!r.ok)throw Error('Server unavailable');const next=await r.json();let change=state&&(state.authenticated!==next.authenticated||state.training?.status!==next.training?.status||state.rooms?.[1]!==next.rooms?.[1]||state.noc?.revision!==next.noc?.revision||state.plant?.revision!==next.plant?.revision);state=next;if(change)render();else chrome()}catch(e){toast('Connection lost. Your progress is saved; reconnecting…',true)}}
+async function refresh(){const version=++refreshVersion;try{const r=await fetch('/api/state');if(!r.ok)throw Error('Server unavailable');const next=await r.json();if(version!==refreshVersion)return;let change=state&&(state.authenticated!==next.authenticated||state.training?.status!==next.training?.status||state.rooms?.[1]!==next.rooms?.[1]||state.noc?.revision!==next.noc?.revision||state.plant?.revision!==next.plant?.revision);state=next;if(change)render();else chrome()}catch(e){toast('Connection lost. Your progress is saved; reconnecting…',true)}}
 (async()=>{await refresh();render();setInterval(updateClock,1000);setInterval(refresh,2500)})();

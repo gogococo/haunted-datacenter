@@ -187,7 +187,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 length=int(self.headers.get('Content-Length',0))
                 if not 0<length<=1024:raise ValueError('Invalid sign-in request.')
-                body=json.loads(self.rfile.read(length));cookie=hosting.login(body.get('code',''),self.client_address[0])
+                body=json.loads(self.rfile.read(length))
+                if not isinstance(body,dict):raise ValueError('Invalid sign-in request.')
+                cookie=hosting.login(body.get('code',''),self.client_address[0])
                 self.json({'ok':True},extra_headers={'Set-Cookie':cookie})
             except (ValueError,TypeError,KeyError):self.json({'error':'Host code did not match, or too many attempts. Wait one minute before trying again.'},401)
             return
@@ -206,6 +208,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if not 0<=length<=50000: raise ValueError('Invalid request size.')
             body=json.loads(self.rfile.read(length) or b'{}')
+            if not isinstance(body,dict):raise ValueError('Use a JSON object for this request.')
             with LOCK:
                 result=self.action(urlparse(self.path).path,body);save();self.json({'state':view(),**(result or {})})
         except subprocess.TimeoutExpired: self.json({'error':'Operation timed out. Your progress is saved.'},408)

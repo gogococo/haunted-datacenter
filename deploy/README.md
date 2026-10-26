@@ -65,3 +65,16 @@ node --test deploy/cloudflare/test-worker.mjs
 ```
 
 Automated tests use temporary data and mocked cloud operations. Real browser and container smoke checks cover login, run start/resume, leaderboard visibility, API access, provider connectivity and persistence. Model artifact downloads may still require the existing explicit dashboard download/import workaround; this release does not silently substitute another model.
+
+## Current release
+
+- Public URL: **https://halloween.curiousjaxx.dev/**
+- Project: `jc-kubecon-demo` (`project-e00nm584pr00c9xab0myzw`), `eu-north1`
+- Host endpoint: `aiendpoint-e00ymr1hqhreq80f96`
+- Persistent filesystem: `computefilesystem-e00ybmwmaz7tm6290n`
+- Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:stream-v1`
+- Checked image manifest: `sha256:25ef74c3842211a5060d0d9c500ba8001a9c6972b1a5f869c9bcf6baf60c261b`
+
+The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it authorizes new training jobs and cooling endpoint creation using the backend account.
+
+The October 26 verification passed 120 Python tests and four edge tests. A real cloud smoke run completed Room 1 with live Tavily Search + Extract, connected to Token Factory, inspected the cooling camera with its vision endpoint and received a real CPU caretaker response. An isolated container check loaded an actual trained adapter, verified the learned repair, then restored the adapter, incident name/UUID and private fixture leaderboard after restart. These checks do not claim a new full cloud training-and-escape playthrough.
