@@ -75,8 +75,10 @@ Automated tests use temporary data and mocked cloud operations. Real browser and
 - Host endpoint: `aiendpoint-e00ymr1hqhreq80f96`
 - Persistent filesystem: `computefilesystem-e00ybmwmaz7tm6290n`
 - Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:stream-v1`
-- Checked image manifest: `sha256:883ec462bbfe7538836ec00a43bb77abd26ae2e6e3898ecd8c1f3ef423281061`
+- Checked image manifest: `sha256:0a66b66f23a036353d367dd7e761b60c0c5c117ecf5415d72529802fe8204a0b`
 
 The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it unlocks presentation shortcuts and model experiments. Normal games use the configured backend integrations without this code.
 
 The UUID-save update passed 156 Python tests and four edge tests. Separate players and tab resumes were verified in a browser, and both saves survived a real process restart. Earlier release checks passed 120 Python tests, followed by 135 for controller reuse. Its lifecycle tests check wake/reuse, stop-on-reset/finish, configuration replacement, private receipts, quota errors and stale-cleanup races. A real cloud smoke run completed Room 1 with live Tavily Search + Extract, connected to Token Factory, inspected the cooling camera with its vision endpoint and received a real CPU caretaker response. An isolated container check loaded an actual trained adapter, verified the learned repair, then restored the adapter, incident name/UUID and private fixture leaderboard after restart. These checks do not claim a new full cloud training-and-escape playthrough.
+
+The entry and expiry update passed 164 Python tests and four edge tests. Browser checks covered both entry actions, resuming an active save, automatic expiry while a room was open, and starting a new UUID after expiry.

@@ -38,7 +38,7 @@ You need Python 3.12, the Nebius CLI authenticated to a project with Serverless 
    python server.py
    ```
 
-Open **http://127.0.0.1:8765**, enter a display name and choose **Start shift** or **Resume shift**. Each game gets a UUID and private resume link; keep either to continue in another browser. Progress and checkpoints live in `.runtime/runs/<UUID>/`, with a shared persistent leaderboard. Keep keys server-side and out of Git.
+Open **http://127.0.0.1:8765**, choose **New game** or **Resume**, then **Enter The Datacenter**. New games need a display name; resuming needs a saved UUID or link. Each game gets a UUID and private resume link; keep either to continue in another browser. Progress and checkpoints live in `.runtime/runs/<UUID>/`, with a shared persistent leaderboard. Keep keys server-side and out of Git.
 
 Playthroughs share one real cooling-controller endpoint. Finishing or starting over releases your game’s share; it stops when nobody else is using it. Starting over keeps your previous UUID save and scores. Training jobs continue independently; manage them in Token Factory. For Docker and cloud hosting, see the [deployment guide](deploy/README.md).
 
