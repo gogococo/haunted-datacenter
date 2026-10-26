@@ -38,7 +38,7 @@ You need Python 3.12, the Nebius CLI authenticated to a project with Serverless 
    python server.py
    ```
 
-Open **http://127.0.0.1:8765**, enter a display name and click **Play**. Progress, checkpoints and scores are saved in the ignored `.runtime/` directory. Keep keys server-side and out of Git.
+Open **http://127.0.0.1:8765**, enter a display name and choose **Start shift** or **Resume shift**. Progress, checkpoints and scores are saved in the ignored `.runtime/` directory. Keep keys server-side and out of Git.
 
 Playthroughs create real cloud resources. Resetting the game preserves scores and does not cancel training jobs or stop endpoints; manage those in Nebius. For Docker and cloud hosting, see the [deployment guide](deploy/README.md).
 
