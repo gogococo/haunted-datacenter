@@ -4,6 +4,7 @@ from http.cookies import SimpleCookie, CookieError
 from pathlib import Path
 
 COOKIE = 'haunted_host'
+SHIFT_SECONDS = 45 * 60
 _attempts = {}
 _lock = threading.Lock()
 
@@ -49,6 +50,17 @@ def initialize(state):
     state.setdefault('player_name', 'Night shift' if state.get('started') else '')
     state.setdefault('practice_reasons', [])
     return state
+
+def clock(state, now=None):
+    """Saved pauses count; time spent away from an unpaused game still elapses."""
+    now = time.time() if now is None else now
+    started = state.get('started')
+    end = state.get('finished') or (state.get('pause_at') if state.get('paused') else now)
+    elapsed = max(0, (end or now) - started - state.get('pause_total', 0)) if started else 0
+    remaining = max(0, SHIFT_SECONDS - elapsed)
+    expired = bool(started and not state.get('escaped') and remaining == 0)
+    return {'remaining_seconds':remaining, 'expired':expired,
+            'resumable':bool(started and not state.get('finished') and not state.get('escaped') and not expired)}
 
 def practice(state, reason):
     initialize(state)

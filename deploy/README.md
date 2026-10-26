@@ -8,7 +8,7 @@ State, per-game CSRF tokens, training packs and checkpoints live in `GAME_DATA_D
 
 The final exit records the name, run ID, finish time and full elapsed time server-side. The leaderboard ranks the fastest 25 verified escapes; clients cannot submit a score. It is accessible from the welcome and celebration screens and at `GET /api/leaderboard`.
 
-A ranked run must use Tavily Search + Extract, submit its own real Token Factory job, load that job's checkpoint, pass the fresh camera assessment, and pass the deployed cooling service's checks. Pauses, prepared evidence, host solutions and model experiments make a run practice. Practice results are retained privately and excluded from rankings. Hints are allowed. Cloud waiting time counts. The pacing timer can enter overtime without ending a run.
+A ranked run must use Tavily Search + Extract, submit its own real Token Factory job, load that job's checkpoint, pass the fresh camera assessment, and pass the deployed cooling service's checks. Pauses, prepared evidence, host solutions and model experiments make a run practice. Practice results are retained privately and excluded from rankings. Hints are allowed. Cloud waiting time counts. Games expire when the 45-minute timer reaches zero. Expired saves are retained but cannot resume or submit more game actions; start a new game instead. Saved pauses stop the timer.
 
 Scores are separate JSON records in `GAME_DATA_DIR/scores/`, alongside the saved incident. Keep the dedicated filesystem when replacing or stopping an endpoint. Back up this directory independently of Git; it can also contain credentials and model artifacts. Local and cloud boards are separate unless their data is intentionally migrated.
 

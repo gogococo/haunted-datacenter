@@ -4,6 +4,25 @@ from unittest.mock import patch
 from http.server import ThreadingHTTPServer
 import hosting, server
 
+class ClockTests(unittest.TestCase):
+    def test_resume_stops_at_exactly_45_minutes(self):
+        state={'started':100}
+        self.assertTrue(hosting.clock(state,2799)['resumable'])
+        self.assertEqual(hosting.clock(state,2799)['remaining_seconds'],1)
+        self.assertTrue(hosting.clock(state,2800)['expired'])
+        self.assertFalse(hosting.clock(state,2800)['resumable'])
+    def test_saved_pause_does_not_expire_while_away(self):
+        state={'started':100,'paused':True,'pause_at':160,'pause_total':20}
+        self.assertEqual(hosting.clock(state,10000)['remaining_seconds'],2660)
+        self.assertTrue(hosting.clock(state,10000)['resumable'])
+    def test_finished_game_cannot_resume_but_keeps_its_ending(self):
+        result=hosting.clock({'started':100,'finished':200,'escaped':True},10000)
+        self.assertFalse(result['resumable']);self.assertFalse(result['expired'])
+    def test_unstarted_game_has_the_full_timer(self):
+        result=hosting.clock({},10000)
+        self.assertEqual(result['remaining_seconds'],2700)
+        self.assertFalse(result['resumable']);self.assertFalse(result['expired'])
+
 class ResultTests(unittest.TestCase):
     def state(self):
         s=server.fresh();s.update(escaped=True,rooms=[True]*3,player_name='Mabel',started=100,finished=160,evidence='tavily',board_citation={'kind':'tavily-extract'})

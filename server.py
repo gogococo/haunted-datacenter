@@ -125,7 +125,7 @@ def view():
         G.state['board']=switchboard.initial();save()
     if G.state['training'] and G.state['training']['status']=='running' and time.time()-G.state['training']['started']>=16:
         G.state['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**G.state,'has_session':True,'is_host':G.admin,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**G.state['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'cooling_controller':serverless.pool_status(G.root),'serverless_configured':bool(serverless.config(G.root)['project_id'] and serverless.config(G.root)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(G.state['sources']['dataset']),'live_report':None,'token':G.token,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**G.state,'timer':hosting.clock(G.state),'has_session':True,'is_host':G.admin,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**G.state['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'cooling_controller':serverless.pool_status(G.root),'serverless_configured':bool(serverless.config(G.root)['project_id'] and serverless.config(G.root)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(G.state['sources']['dataset']),'live_report':None,'token':G.token,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=G.state['noc']
@@ -231,15 +231,15 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as error:self.json({'error':str(error)},404)
     def get(self):
         path=urlparse(self.path).path
-        if path=='/healthz': self.json({'ok':True,'version':'uuid-saves-v2'});return
+        if path=='/healthz': self.json({'ok':True,'version':'shift-entry-v3'});return
         if path=='/api/leaderboard': self.json({'entries':[{k:v for k,v in row.items() if k!='run_id'} for row in hosting.leaderboard(G.root)]});return
         if path=='/api/state':
             if not self.has_game:self.json({'authenticated':True,'hosted':hosting.hosted(),'has_session':False,'is_host':False});return
             with G.lock:
                 n=G.state['noc'];job=n.get('submission') or {}
-                if job.get('id') and job.get('status') not in ('succeeded','failed','cancelled') and time.time()-n.get('polled_at',0)>=20 and (n.get('operation') or {}).get('status')!='running':
+                if not hosting.clock(G.state)['expired'] and job.get('id') and job.get('status') not in ('succeeded','failed','cancelled') and time.time()-n.get('polled_at',0)>=20 and (n.get('operation') or {}).get('status')!='running':
                     n['polled_at']=time.time();launch_noc('refresh',{})
-                if (G.state['plant'].get('endpoint') and not G.state.get('escaped')):serverless.touch(G.root,G.state['run_id'])
+                if (G.state['plant'].get('endpoint') and not G.state.get('escaped') and not hosting.clock(G.state)['expired']):serverless.touch(G.root,G.state['run_id'])
                 self.json(view())
             return
         files={'/controller.py':('cloud_controller.py','text/plain'),'/training-replay.json':('web/training-replay.json','application/json'),'/plant.js':('web/plant.js','text/javascript'),'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
@@ -274,6 +274,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self.has_game:self.json({'error':'Start a shift or enter its UUID first.'},401);return
         if self.headers.get('X-Game-Token')!=G.token: self.json({'error':'Refresh the page to reconnect.'},403);return
+        if hosting.clock(G.state)['expired'] and path!='/api/host':
+            self.json({'error':'This game’s 45 minutes are up. Start a new game.', 'expired':True},410);return
         if hosting.hosted() and path in ('/api/check','/api/repair','/api/calibrate','/api/baseline','/api/train','/api/deploy','/api/evaluate','/api/dataset'):
             self.json({'error':'This retired local-editor route is disabled in the hosted game.'},403);return
         try:
@@ -294,6 +296,8 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError,KeyError,TypeError,FileNotFoundError) as e:self.json({'error':str(e)},400)
         except Exception as e:self.json({'error':f'Operation failed ({type(e).__name__}). Check the local terminal.'},500)
     def action(self,path,b):
+        if hosting.clock(G.state)['expired'] and not (path=='/api/host' and b.get('action')=='reset'):
+            raise ValueError('This game’s 45 minutes are up. Start a new game.')
         if not G.admin and (path=='/api/solution' or path in ('/api/noc/playtest','/api/noc/deploy') or (path=='/api/host' and b.get('action') not in ('pause','reset'))):
             raise ValueError('This experiment requires host access. Normal play does not need a host code.')
         if path=='/api/start':

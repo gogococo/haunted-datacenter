@@ -88,6 +88,30 @@ class PlayerHTTPTests(unittest.TestCase):
     if old['noc']['connection']:break
     time.sleep(.01)
   self.assertEqual(old['noc']['connection']['owner'],'Alice');self.assertIsNone(self.request('state',game=new)['noc']['connection'])
+ def test_expired_uuid_cannot_resume_or_submit_more_work(self):
+  a=self.create('Alice');game=sessions.get(server.RUNTIME,a['run_id']);game.state['started']=time.time()-2701
+  resumed=self.request('state?run='+a['run_id'])
+  self.assertTrue(resumed['timer']['expired']);self.assertFalse(resumed['timer']['resumable'])
+  for path,body in [('start',{'name':'Alice'}),('hint',{'room':'2'}),('noc/connect',{}),('noc/import',{})]:
+   with self.assertRaises(urllib.error.HTTPError) as error:self.request(path,body,a)
+   self.assertEqual(error.exception.code,410)
+  self.assertEqual(game.state['hints']['2'],0)
+ def test_expired_game_can_start_over_without_changing_another_save(self):
+  a=self.create('Alice');b=self.create('Bob');sessions.get(server.RUNTIME,a['run_id']).state['started']=time.time()-2701
+  with patch.object(serverless,'release'):
+   fresh=self.request('host',{'action':'reset'},a)['state']
+  self.assertNotEqual(fresh['run_id'],a['run_id']);self.assertFalse(fresh['timer']['expired'])
+  self.assertTrue(self.request('state',game=a)['timer']['expired']);self.assertTrue(self.request('state',game=b)['timer']['resumable'])
+ def test_expired_game_cannot_be_revived_by_pausing(self):
+  a=self.create('Alice');sessions.get(server.RUNTIME,a['run_id']).state['started']=time.time()-2701
+  with self.assertRaises(urllib.error.HTTPError):self.request('host',{'action':'pause'},a)
+  self.assertFalse(sessions.get(server.RUNTIME,a['run_id']).state['paused'])
+ def test_expired_game_poll_does_not_launch_cloud_work_or_renew_cpu(self):
+  a=self.create('Alice');game=sessions.get(server.RUNTIME,a['run_id']);game.state['started']=time.time()-2701
+  game.state['noc']['submission']={'id':'already-submitted','status':'running'};game.state['plant']['endpoint']={'id':'already-deployed'}
+  with patch.object(server,'launch_noc') as poll,patch.object(serverless,'touch') as touch:
+   self.request('state',game=a)
+  poll.assert_not_called();touch.assert_not_called()
 
 
 class SharedRunnerTests(unittest.TestCase):
