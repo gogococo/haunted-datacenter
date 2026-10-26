@@ -40,7 +40,7 @@ You need Python 3.12, the Nebius CLI authenticated to a project with Serverless 
 
 Open **http://127.0.0.1:8765**, enter a display name and choose **Start shift** or **Resume shift**. Progress, checkpoints and scores are saved in the ignored `.runtime/` directory. Keep keys server-side and out of Git.
 
-Playthroughs create real cloud resources. Resetting the game preserves scores and does not cancel training jobs or stop endpoints; manage those in Nebius. For Docker and cloud hosting, see the [deployment guide](deploy/README.md).
+The first playthrough creates a real cooling-controller endpoint; later shifts reuse it. Finishing or resetting stops that controller to release CPU, while preserving scores. Training jobs continue independently; manage them in Token Factory. For Docker and cloud hosting, see the [deployment guide](deploy/README.md).
 
 ## The rooms
 
@@ -57,7 +57,7 @@ flowchart TD
     Game -->|Search and Extract| Tavily[Tavily]
     Game -->|Vision inference and LoRA training| TF[Token Factory]
     TF -->|Trained adapter| Game
-    Game -->|Deploy and call| Cooling[Separate Serverless AI CPU endpoint<br/>Room 3 control application]
+    Game -->|Create once, start/stop and call| Cooling[Separate Serverless AI CPU endpoint<br/>Room 3 control application]
     Game --> Storage[Persistent filesystem<br/>Progress, checkpoints and leaderboard]
     Secrets[SecretStash<br/>Runtime credentials] -.-> Game
 ```

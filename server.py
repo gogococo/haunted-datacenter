@@ -76,7 +76,7 @@ def view():
         STATE['board']=switchboard.initial();save()
     if STATE['training'] and STATE['training']['status']=='running' and time.time()-STATE['training']['started']>=16:
         STATE['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**STATE,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**STATE['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'serverless_configured':bool(serverless.config(RUNTIME)['project_id'] and serverless.config(RUNTIME)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(STATE['sources']['dataset']),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**STATE,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**STATE['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'cooling_controller':serverless.pool_status(RUNTIME),'serverless_configured':bool(serverless.config(RUNTIME)['project_id'] and serverless.config(RUNTIME)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(STATE['sources']['dataset']),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=STATE['noc']
@@ -109,18 +109,18 @@ def launch_noc(action,body):
 
 
 def launch_plant(action,body):
-    p=STATE['plant'];session=STATE['created_at']
+    p=STATE['plant'];session=STATE['created_at'];lease=STATE['run_id']
     if (p.get('operation') or {}).get('status')=='running':raise ValueError('A cloud request is still running. You can place pipes while deployment submits.')
     snapshot=copy.deepcopy(p)
     if action in ('deploy','health','test','replace'):snapshot['report']=None
     if action in ('deploy','health','replace'):snapshot['health']=None
     board=plant.normalize(body.get('pipes',p['pipes']))
     if action in ('deploy','health','test','replace'):p['report']=None;STATE['rooms'][2]=False;STATE['escaped']=False
-    p['operation']={'action':action,'status':'running','message':{'deploy':'Submitting the real CPU app to Nebius Serverless…','refresh':'Reading cloud endpoint status…','health':'Requesting the deployed app’s /healthz route…','test':'Sending this circuit’s sensor report to the real app…','logs':'Reading the real app’s logs…','replace':'Stopping the old app and deploying the corrected configuration…'}[action]};p['revision']+=1
+    p['operation']={'action':action,'status':'running','message':{'deploy':'Connecting to the reusable CPU controller (or creating it on the first shift)…','refresh':'Reading cloud endpoint status…','health':'Requesting the deployed app’s /healthz route…','test':'Sending this circuit’s sensor report to the real app…','logs':'Reading the real app’s logs…','replace':'Stopping the old app and deploying the corrected configuration…'}[action]};p['revision']+=1
     def worker():
         try:
-            if action=='deploy':message=serverless.deploy(snapshot,body,RUNTIME)
-            elif action=='replace':message=serverless.replace(snapshot,body,RUNTIME)
+            if action=='deploy':message=serverless.deploy(snapshot,body,RUNTIME,lease)
+            elif action=='replace':message=serverless.replace(snapshot,body,RUNTIME,lease)
             elif action=='refresh':message=serverless.refresh(snapshot,RUNTIME)
             elif action=='health':message=serverless.health(snapshot,RUNTIME)
             elif action=='logs':message=serverless.logs(snapshot,RUNTIME)
@@ -224,7 +224,9 @@ class Handler(BaseHTTPRequestHandler):
             if act in ('caretaker-backup','caretaker-prompt'):
                 hosting.practice(STATE,'Host model experiment')
                 launch_noc('backup' if act=='caretaker-backup' else 'prompt-profile',{'host_override':True})
-            elif act=='reset': STATE=fresh()
+            elif act=='reset':
+                serverless.release(RUNTIME,STATE['run_id'],copy.deepcopy(STATE['plant'].get('endpoint')))
+                STATE=fresh()
             elif act=='pause':
                 hosting.practice(STATE,'Timer paused')
                 if not STATE['paused']: STATE['pause_at']=time.time();STATE['paused']=True
@@ -232,6 +234,7 @@ class Handler(BaseHTTPRequestHandler):
             elif act in ('live','rehearsal'):
                 if STATE['mode']!=act:
                     # Keep code edits; clear all gates to prevent simulated evidence carrying into live mode.
+                    serverless.release(RUNTIME,STATE['run_id'],copy.deepcopy(STATE['plant'].get('endpoint')))
                     sources=STATE['sources'];STATE=fresh();STATE['sources']=sources;STATE['mode']=act
                     event(f'Mode changed to {act}. Gates and timer reset; code edits retained.')
         elif path=='/api/solution':
@@ -317,6 +320,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not report.get('passed') or not report.get('request_nonce') or report.get('endpoint_id')!=(p.get('endpoint') or {}).get('id') or report.get('board_hash')!=plant.fingerprint(board) or not plant.check_pipes(board)['passed']:raise ValueError('Complete the circuit, deploy the controller, and pass its live cooling test with this layout.')
                 STATE['rooms'][2]=True;STATE['escaped']=True;STATE['finished']=time.time();event('Closed cooling circuit stable. Cloud controller healthy. Everyone leaves together.')
                 STATE['result']=hosting.record(STATE,RUNTIME)
+                serverless.release(RUNTIME,STATE['run_id'],copy.deepcopy(p.get('endpoint')))
             else:raise ValueError('Unknown generator-room action.')
         elif path.startswith('/api/noc/'):
             action=path.rsplit('/',1)[1]

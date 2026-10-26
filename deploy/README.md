@@ -2,7 +2,7 @@
 
 One host controls one shared incident. Viewers discuss the solution on stream. Co-op clicking, independent visitor games and state synchronization are future work.
 
-The welcome screen takes a display name. Each fresh incident has a UUID, visible in Host controls. Refreshing or reconnecting resumes the current incident. Resetting creates a new UUID without deleting previous scores or cloud resources.
+The welcome screen takes a display name. Each fresh incident has a UUID, visible in Host controls. Refreshing or reconnecting resumes the current incident. Resetting creates a new UUID without deleting previous scores. It stops the reusable cooling controller without deleting its configuration.
 
 ## Persistent leaderboard
 
@@ -55,12 +55,12 @@ The game uses its own host-code sign-in with an HttpOnly, SameSite=Strict cookie
 
 Cloudflare's `haunted-datacenter-edge` Worker connects only `halloween.curiousjaxx.dev` to the Nebius HTTPS upstream. It forwards the host session cookie, rejects foreign browser origins, disables caching and translates the exact app origin for the backend check. Its source has only public routing configuration. The existing Cube demo is separate.
 
-Endpoint-secret references pin a SecretStash version. To change credentials, create a new version and replace the endpoint with the same persistent filesystem. Do not delete that filesystem. A reset does not cancel training jobs or stop cooling endpoints; manage those separately in Nebius.
+Endpoint-secret references pin a SecretStash version. To change credentials, create a new version and replace the endpoint with the same persistent filesystem. Do not delete that filesystem. Finishing or resetting asynchronously stops the game’s cooling controller to release CPU. Later shifts start and reuse that endpoint; training jobs continue independently. A configuration change stops the old controller before provisioning its replacement. The private pool receipt lives at `GAME_DATA_DIR/serverless/controller.json`; it survives game resets. Discovery verifies the project, game resource name and controller container before reusing or stopping a resource. Other demos are never selected. Keep one active game host per project; local and hosted copies should not run simultaneous shifts against the same controller. Stopped endpoints retain their disk/configuration; remove obsolete stopped resources in Nebius if no longer needed. If a stop fails, the next Room 3 visit shows the cleanup error; inspect it in the console.
 
 ## Verification
 
 ```sh
-GAME_DATA_DIR=$(mktemp -d) python3 -m unittest -q test_game test_caretaker test_plant test_upgrade test_checkpoint_flow test_hosting
+GAME_DATA_DIR=$(mktemp -d) python3 -m unittest -q test_game test_caretaker test_plant test_upgrade test_checkpoint_flow test_hosting test_serverless
 node --test deploy/cloudflare/test-worker.mjs
 ```
 
@@ -77,4 +77,4 @@ Automated tests use temporary data and mocked cloud operations. Real browser and
 
 The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it authorizes new training jobs and cooling endpoint creation using the backend account.
 
-The October 26 verification passed 120 Python tests and four edge tests. A real cloud smoke run completed Room 1 with live Tavily Search + Extract, connected to Token Factory, inspected the cooling camera with its vision endpoint and received a real CPU caretaker response. An isolated container check loaded an actual trained adapter, verified the learned repair, then restored the adapter, incident name/UUID and private fixture leaderboard after restart. These checks do not claim a new full cloud training-and-escape playthrough.
+The October 26 release verification passed 120 Python tests and four edge tests. The controller reuse update adds lifecycle tests for wake/reuse, stop-on-reset/finish, configuration replacement, private receipts, quota errors and stale-cleanup races. A real cloud smoke run completed Room 1 with live Tavily Search + Extract, connected to Token Factory, inspected the cooling camera with its vision endpoint and received a real CPU caretaker response. An isolated container check loaded an actual trained adapter, verified the learned repair, then restored the adapter, incident name/UUID and private fixture leaderboard after restart. These checks do not claim a new full cloud training-and-escape playthrough.

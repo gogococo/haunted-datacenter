@@ -2,6 +2,7 @@
 Auth tokens remain in private runtime receipts and never enter /api/state.
 """
 import json,os,re,secrets,subprocess,time,urllib.request,urllib.parse
+import contextlib,fcntl,threading
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent
 
@@ -11,6 +12,8 @@ def cli(args):
     except (OSError,subprocess.TimeoutExpired):raise ValueError('Nebius CLI is unavailable or timed out. Check your AI Cloud login; no automatic retry.') from None
     if p.returncode:
         # Never echo CLI output: endpoint responses and errors can carry auth tokens.
+        if 'compute.instance.non-gpu.vcpu' in p.stderr and ('Quota' in p.stderr or 'quota' in p.stderr):
+            raise ValueError('Nebius CPU quota is full. No extra controller was provisioned. Stop an unused demo or reuse this game’s existing controller; other demos are left alone.')
         raise ValueError('Nebius CLI could not complete '+ ' '.join(args[:3])+'. Check your project, CLI login and resource quotas. No automatic retry.')
     if '--dry-run' in args:return {'validated':True}
     try:return json.loads(p.stdout or '{}')
@@ -41,33 +44,171 @@ def public(row):
     urls=[u for u in status.get('public_endpoints',[]) if isinstance(u,str) and u.startswith('https://')]
     return {'id':meta.get('id'),'name':meta.get('name'),'state':status.get('state','STARTING'),'url':urls[0] if urls else '', 'service':'Nebius Serverless AI','checked_at':time.time()}
 
-def deploy(p,body,runtime):
-    if p.get('deployment_unknown'):raise ValueError('A deployment had an uncertain result. Check Serverless AI in the console before submitting another.')
-    if p.get('endpoint'):raise ValueError('This incident already has an endpoint. Refresh its status instead of creating another.')
-    c=config(runtime)
-    if not c['project_id'] or not c['subnet_id']:raise ValueError('Configure your Nebius AI Cloud project and subnet before deploying. See README → Serverless setup.')
-    try:port=int(body.get('port',8000));target=float(body.get('target',75));budget=float(body.get('budget',12))
+# One project controller is reused between incidents. Credentials and the lease are
+# private; only the selected endpoint DTO is copied into the saved game state.
+_POOL_LOCK=threading.RLock()
+_RELEASED=set()
+_RELEASE_LOCK=threading.Lock()
+POOL_NAME='haunted-cooling-controller'
+ACTIVE_STATES={'RUNNING','STARTING','CREATING','UPDATING','IMAGE_PULLING','PROVISIONING'}
+
+def _write(path,value):
+    path.parent.mkdir(parents=True,exist_ok=True)
+    temp=path.with_suffix('.tmp');temp.write_text(json.dumps(value));temp.chmod(0o600);temp.replace(path)
+
+def _pool_path(runtime):return runtime/'serverless/controller.json'
+
+def _read(path):
+    try:return json.loads(path.read_text())
+    except (OSError,ValueError):return {}
+
+@contextlib.contextmanager
+def lifecycle_lock(runtime):
+    # Serialize CLI mutations across request threads and processes using this data
+    # directory. A project-wide stable name also prevents duplicate first creates.
+    with _POOL_LOCK:
+        path=runtime/'serverless/lifecycle.lock';path.parent.mkdir(parents=True,exist_ok=True)
+        with path.open('a') as lock:
+            path.chmod(0o600);fcntl.flock(lock,fcntl.LOCK_EX)
+            try:yield
+            finally:fcntl.flock(lock,fcntl.LOCK_UN)
+
+def owned(row,project):
+    meta=row.get('metadata',{});spec=row.get('spec',{})
+    name=meta.get('name','')
+    return bool(meta.get('parent_id')==project and
+        re.fullmatch(r'haunted-cooling-(?:[0-9]+|controller(?:-[a-z0-9]+)?)',name) and
+        spec.get('image')=='python:3.12-slim' and spec.get('container_command')=='python' and
+        spec.get('args')=='/opt/controller.py' and
+        any(x.get('container_path')=='/opt/controller.py' for x in spec.get('injected_files',[])))
+
+def _settings(body):
+    try:values={'port':int(body.get('port',8000)),'target':float(body.get('target',75)),'budget':float(body.get('budget',12))}
     except (TypeError,ValueError):raise ValueError('Use numeric port, temperature target and power budget.') from None
-    if not 1<=port<=65535 or not 30<=target<=100 or not 1<=budget<=30:raise ValueError('Check the controller plate: port, temperature target and power budget must be within the supported ranges.')
-    name='haunted-cooling-'+str(int(time.time()));token=secrets.token_urlsafe(32)
+    if not 1<=values['port']<=65535 or not 30<=values['target']<=100 or not 1<=values['budget']<=30:
+        raise ValueError('Check the controller plate: port, temperature target and power budget must be within the supported ranges.')
+    return values
+
+def _row_settings(row):
+    spec=row['spec'];env={x['name']:x.get('value') for x in spec.get('environment_variables',[])}
+    return _settings({'port':spec['ports'][0]['container_port'],'target':env['TARGET_C'],'budget':env['MAX_POWER_KW']})
+
+def _remember(p,row,runtime,lease):
+    c=config(runtime);identifier=row['metadata']['id'];values=_row_settings(row)
+    token=row.get('spec',{}).get('auth_token') or _read(private_path(runtime,identifier)).get('token')
+    if not token:raise ValueError('The existing controller has no available private access token. Check its cloud configuration before replacing it.')
+    receipt={'id':identifier,'name':row['metadata']['name'],'project_id':c['project_id'],'token':token,**values,'lease':lease,'state':row.get('status',{}).get('state','STARTING')}
+    _write(private_path(runtime,identifier),receipt);_write(_pool_path(runtime),receipt)
+    p['endpoint']={**public(row),'config':values,'reused':True};p['deployment_unknown']=False;p['health']=None;p['report']=None
+    return receipt
+
+def _find(p,runtime,project):
+    rows=cli(['ai','endpoint','list','--parent-id',project]).get('items',[])
+    # List responses can omit spec fields. GET before trusting ownership, config,
+    # or credentials. Never select the host app or another project's demo.
+    candidates=[]
+    for row in rows:
+        meta=row.get('metadata',{})
+        if re.fullmatch(r'haunted-cooling-(?:[0-9]+|controller(?:-[a-z0-9]+)?)',meta.get('name','')):
+            full=cli(['ai','endpoint','get',meta['id']])
+            if owned(full,project):candidates.append(full)
+    preferred=(p.get('endpoint') or {}).get('id') or _read(_pool_path(runtime)).get('id')
+    candidates.sort(key=lambda r:(r.get('status',{}).get('state') in ACTIVE_STATES,r['metadata']['id']==preferred,r['metadata'].get('created_at','')),reverse=True)
+    return candidates
+
+def _cancelled(runtime,lease):
+    with _RELEASE_LOCK:return (str(runtime.resolve()),lease) in _RELEASED
+
+def _stop(row,runtime):
+    if row.get('status',{}).get('state')!='STOPPED':
+        cli(['ai','endpoint','stop',row['metadata']['id']])
+    receipt=_read(_pool_path(runtime))
+    if receipt.get('id')==row['metadata']['id']:
+        receipt.update(state='STOPPED',cleanup_error=None);_write(_pool_path(runtime),receipt)
+
+def _deploy(p,body,runtime,lease,replace=False):
+    if _cancelled(runtime,lease):raise ValueError('This shift has ended. The controller was not started.')
+    if p.get('deployment_unknown'):raise ValueError('A deployment had an uncertain result. Check Serverless AI in the console before submitting another.')
+    c=config(runtime);values=_settings({**(p.get('endpoint') or {}).get('config',{}),**body})
+    if not c['project_id'] or not c['subnet_id']:raise ValueError('Configure your Nebius AI Cloud project and subnet before deploying. See README → Serverless setup.')
+    candidates=_find(p,runtime,c['project_id'])
+    if replace and not candidates:raise ValueError('There is no game-owned controller to replace.')
+    selected=candidates[0] if candidates else None
+    if selected:
+        _remember(p,selected,runtime,lease)
+        pending=runtime/'serverless/pending.json'
+        if _read(pending).get('name') in {r['metadata']['name'] for r in candidates}:pending.unlink(missing_ok=True)
+        # Clean up only positively identified controllers from old game versions.
+        # Stop first, so replacement/wake never needs two controller CPU slots.
+        for row in candidates[1:]:
+            if row.get('status',{}).get('state') in ACTIVE_STATES:_stop(row,runtime)
+        if replace and values!=p['endpoint']['config']:
+            _stop(selected,runtime)
+            p.setdefault('previous_endpoints',[]).append({**public(selected),'state':'STOPPED'})
+        else:
+            if values!=p['endpoint']['config']:
+                raise ValueError('Reused controller has a different configuration. Its existing values are shown below. Use “Replace with corrected deployment” to change them; the old CPU stops first.')
+            state=p['endpoint']['state']
+            if state=='STOPPED':
+                cli(['ai','endpoint','start',p['endpoint']['id'],'--async'])
+                p['endpoint']['state']='STARTING'
+                receipt=_read(_pool_path(runtime));receipt['state']='STARTING';_write(_pool_path(runtime),receipt)
+                return 'Starting the existing cooling controller. Same endpoint, no new CPU allocation. Repair the circuit while it wakes.'
+            if state not in ACTIVE_STATES:
+                raise ValueError('The existing controller is '+state+'. Wait for it to stop, then start it again; no extra controller was created.')
+            return 'Connected to the existing cooling controller. No new endpoint created. Check HTTP readiness, then test this circuit.'
+    pending=_read(runtime/'serverless/pending.json')
+    if pending and pending.get('project_id')==c['project_id']:
+        # A crash between create and receipt must never trigger a second create.
+        if not any(r['metadata']['name']==pending.get('name') for r in candidates):
+            raise ValueError('A previous controller create has no confirmed receipt. Check the cloud console before retrying; no duplicate was submitted.')
+    name=POOL_NAME if not candidates else POOL_NAME+'-'+secrets.token_hex(6)
+    token=secrets.token_urlsafe(32)
     args=['ai','endpoint','create','--name',name,'--parent-id',c['project_id'],'--subnet-id',c['subnet_id'],
           '--image','python:3.12-slim','--platform',c['platform'],'--preset',c['preset'],'--disk-size','20Gi',
-          '--container-port',str(port),'--container-command','python','--args','/opt/controller.py',
-          '--inject-file',str(ROOT/'cloud_controller.py')+':/opt/controller.py','--env','TARGET_C='+str(target),'--env','MAX_POWER_KW='+str(budget),
+          '--container-port',str(values['port']),'--container-command','python','--args','/opt/controller.py',
+          '--inject-file',str(ROOT/'cloud_controller.py')+':/opt/controller.py','--env','TARGET_C='+str(values['target']),'--env','MAX_POWER_KW='+str(values['budget']),
           '--auth','token','--token',token,'--async']
-    # Resolve validation before making the create request.
     cli([*args,'--dry-run'])
     p['deployment_unknown']=True
-    folder=runtime/'serverless';folder.mkdir(exist_ok=True)
-    pending=folder/'pending.json';pending.write_text(json.dumps({'name':name,'token':token,'project_id':c['project_id']}));pending.chmod(0o600)
+    pending=runtime/'serverless/pending.json';_write(pending,{'name':name,'token':token,'project_id':c['project_id']})
     result=cli(args)
     identifier=result.get('resource_id') or result.get('resourceId') or result.get('metadata',{}).get('id')
     if not identifier:raise ValueError('Create returned no endpoint ID. Inspect the console; do not submit another deployment.')
-    receipt={'token':token,'project_id':c['project_id'],'port':port,'target':target,'budget':budget,'created_at':time.time()}
-    path=private_path(runtime,identifier);path.write_text(json.dumps(receipt));path.chmod(0o600)
-    p['endpoint']={'id':identifier,'name':name,'state':'STARTING','url':'','config':{'port':port,'target':target,'budget':budget}}
+    receipt={'id':identifier,'name':name,'token':token,'project_id':c['project_id'],**values,'lease':lease,'state':'STARTING','created_at':time.time()}
+    _write(private_path(runtime,identifier),receipt);_write(_pool_path(runtime),receipt);pending.unlink(missing_ok=True)
+    p['endpoint']={'id':identifier,'name':name,'state':'STARTING','url':'','config':values,'reused':False}
     p['deployment_unknown']=False;p['health']=None;p['report']=None
-    return 'Deployment submitted to Nebius Serverless. Repair the cooling loop while the container starts.'
+    return 'First cooling controller submitted to Nebius Serverless. Later shifts reuse this endpoint. Repair the circuit while the container starts.'
+
+def deploy(p,body,runtime,lease=None):
+    with lifecycle_lock(runtime):return _deploy(p,body,runtime,lease)
+
+def release(runtime,lease,endpoint=None):
+    """Nonblocking cleanup. A stale reset cannot stop a newer shift's lease."""
+    if not lease:return
+    with _RELEASE_LOCK:_RELEASED.add((str(runtime.resolve()),lease))
+    def worker():
+        with lifecycle_lock(runtime):
+            pool=_read(_pool_path(runtime));project=config(runtime)['project_id']
+            try:
+                # Adopt a pre-pool saved incident on its first reset/finish.
+                if not pool and endpoint and private_path(runtime,endpoint['id']).exists():
+                    row=cli(['ai','endpoint','get',endpoint['id']])
+                    if owned(row,project):pool=_remember({},row,runtime,lease)
+                if not pool or pool.get('lease')!=lease or pool.get('project_id')!=project:return
+                row=cli(['ai','endpoint','get',pool['id']])
+                if not owned(row,project):raise ValueError('Controller ownership could not be verified. No resource was stopped.')
+                pool.update(state='STOPPING',cleanup_error=None);_write(_pool_path(runtime),pool)
+                _stop(row,runtime)
+            except (ValueError,OSError,KeyError) as error:
+                pool['cleanup_error']=str(error) if isinstance(error,ValueError) else 'Controller cleanup failed. Check its status in Nebius.'
+                _write(_pool_path(runtime),pool)
+    thread=threading.Thread(target=worker,daemon=True);thread.start();return thread
+
+def pool_status(runtime):
+    pool=_read(_pool_path(runtime))
+    return {k:pool[k] for k in ('id','state','cleanup_error') if k in pool}
 
 def refresh(p,runtime):
     ep=p.get('endpoint')
@@ -117,11 +258,6 @@ def logs(p,runtime):
     p['cloud_logs']=result.stdout.replace(receipt['token'],'[REDACTED]')[-6000:]
     return 'Actual container logs retrieved from Nebius Serverless.'
 
-def replace(p,body,runtime):
-    ep=p.get('endpoint')
-    if not ep:raise ValueError('There is no deployment to replace.')
-    if not private_path(runtime,ep['id']).exists():raise ValueError('Only a controller created by this game can be replaced.')
-    cli(['ai','endpoint','stop',ep['id']])
-    p.setdefault('previous_endpoints',[]).append({'id':ep['id'],'name':ep['name'],'state':'STOPPED'})
-    p['endpoint']=None;p['health']=None;p['report']=None
-    return deploy(p,body,runtime)
+def replace(p,body,runtime,lease=None):
+    if not p.get('endpoint'):raise ValueError('There is no deployment to replace.')
+    with lifecycle_lock(runtime):return _deploy(p,body,runtime,lease,replace=True)
