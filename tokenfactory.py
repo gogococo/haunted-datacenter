@@ -6,7 +6,7 @@ Custom-weight registration is account-dependent and is performed in the console.
 import argparse, hashlib, json, os, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from pathlib import Path
 import content
-ROOT=Path(__file__).resolve().parent; RT=ROOT/'.runtime'; RT.mkdir(exist_ok=True)
+ROOT=Path(__file__).resolve().parent; RT=Path(os.environ.get('GAME_DATA_DIR',str(ROOT/'.runtime'))); RT.mkdir(parents=True,exist_ok=True)
 CONTROL='https://api.tokenfactory.nebius.com'
 
 def write(name,data):

@@ -1,0 +1,12 @@
+services:
+  haunted:
+    build: .
+    platform: linux/amd64
+    ports:
+      - '127.0.0.1:8765:8080'
+    env_file: .env
+    volumes:
+      - haunted-progress:/app/runtime-data
+    restart: unless-stopped
+volumes:
+  haunted-progress:

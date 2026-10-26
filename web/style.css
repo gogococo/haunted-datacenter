@@ -71,3 +71,13 @@
 .plant-terminal{left:51%;top:75%;width:20%;height:18%}.plant-room .plant-room-caption{max-width:43%;bottom:10px;font-size:9px}.checkpoint-import{padding:18px;border:1px solid #a6b196;background:#e1e7d5}.checkpoint-import label{display:block;margin:18px 0;font-size:13px}.checkpoint-import input{display:block;margin-top:10px;max-width:100%}.checkpoint-import code{overflow-wrap:anywhere}.checkpoint-import p{font-size:14px;line-height:1.6}.checkpoint-selection h3,.training-receipt h3{font-size:25px;margin:12px 0}.plant-progress{flex-wrap:wrap}.plant-terminal>span{white-space:normal;min-width:125px;text-align:center}
 
 .training-handoff>small{font:10px var(--mono);color:#4e6748}.training-handoff h3{font:27px var(--serif);margin:12px 0}.training-handoff>p{font-size:14px;line-height:1.6}.training-handoff>.primary{margin:10px 0}.training-handoff blockquote{margin:14px 0;padding:14px 17px;border-left:3px solid #aa8561;background:#e6ddc8;font:16px/1.5 var(--serif)}.training-handoff cite{display:block;margin-top:8px;font:11px var(--mono)}.training-handoff details{margin-top:15px}.training-handoff details code{display:block;font-size:10px;overflow-wrap:anywhere;margin:10px 0}.training-handoff details a{display:block;margin-top:10px;font-size:12px}
+/* Single-host welcome and persistent results. */
+.welcome-copy form{display:grid;gap:12px;max-width:350px;margin:20px 0 8px}
+.welcome-copy form label{font-size:14px;color:#455945}
+.welcome-copy form input{box-sizing:border-box;width:100%;padding:13px 15px;border:1px solid #9ba784;background:#fffdf3;color:#203829;font:inherit}
+.welcome-copy form button{justify-self:start}
+.score-table{width:100%;border-collapse:collapse;margin:20px 0;font-size:16px}
+.score-table th,.score-table td{text-align:left;padding:14px 12px;border-bottom:1px solid #c9c9b4}
+.score-table td:last-child{font-family:monospace;font-size:19px}
+.run-result{padding:20px;margin:24px 0;background:#d7e4c2;color:#233d2c}
+#leaderboard-dialog{max-width:700px}

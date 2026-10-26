@@ -6,15 +6,16 @@ from pathlib import Path
 from urllib.parse import urlparse
 import content
 import caretaker, copy
-import switchboard,clue_post,plant,lessons,serverless
+import switchboard,clue_post,plant,lessons,serverless,hosting
 
 ROOT=Path(__file__).resolve().parent
-RUNTIME=ROOT/'.runtime'; RUNTIME.mkdir(exist_ok=True)
+RUNTIME=Path(os.environ.get('GAME_DATA_DIR',str(ROOT/'.runtime'))); RUNTIME.mkdir(parents=True,exist_ok=True)
 TOKEN=secrets.token_urlsafe(24)
 LOCK=threading.RLock()
 
 def fresh():
-    return {'plant':plant.initial(),'noc':caretaker.initial(),'puzzle_version':switchboard.VERSION,'board':switchboard.initial(),'created_at':time.time(),'mode':'rehearsal','started':None,'paused':False,'pause_at':None,'pause_total':0,'evidence':None,'calibration':False,'rooms':[False,False,False],'guard':False,'training':None,'endpoint':False,'baseline':None,'evaluation':None,'escaped':False,'hints':{'1':0,'2':0,'3':0},'sources':{'retry':content.RETRY_STARTER,'guard':content.RUNBOOK_STARTER,'dataset':content.starter_records()},'log':[{'text':'Incident SEV-0 opened. Previous on-call engineer: still assigned.','at':time.time()}]}
+    return hosting.initialize({'plant':plant.initial(),'noc':caretaker.initial(),'puzzle_version':switchboard.VERSION,'board':switchboard.initial(),'created_at':time.time(),'mode':'rehearsal','started':None,'paused':False,'pause_at':None,'pause_total':0,'evidence':None,'calibration':False,'rooms':[False,False,False],'guard':False,'training':None,'endpoint':False,'baseline':None,'evaluation':None,'escaped':False,'hints':{'1':0,'2':0,'3':0},'sources':{'retry':content.RETRY_STARTER,'guard':content.RUNBOOK_STARTER,'dataset':content.starter_records()},'log':[{'text':'Incident SEV-0 opened. Previous on-call engineer: still assigned.','at':time.time()}]})
+
 try: STATE=json.loads((RUNTIME/'state.json').read_text())
 except (OSError,ValueError): STATE=fresh()
 if STATE.get('puzzle_version')!=switchboard.VERSION:
@@ -42,12 +43,14 @@ if STATE['noc'].get('flow_version')!=2:
         if n.get('runner'):n['runner']['active']=False
         STATE['rooms'][1]=False;STATE['rooms'][2]=False;STATE['escaped']=False
 
+hosting.initialize(STATE)
+
 def maintenance_access():
     n=STATE['noc'];j=n.get('submission') or {}
     return bool(STATE['rooms'][0] and j.get('id') and j.get('pack_hash')==lessons.packet_hash(n,STATE['sources']['dataset']))
 
 def save():
-    temp=RUNTIME/'state.tmp'; temp.write_text(json.dumps(STATE)); temp.replace(RUNTIME/'state.json')
+    temp=RUNTIME/'state.tmp'; temp.write_text(json.dumps(STATE)); temp.chmod(0o600); temp.replace(RUNTIME/'state.json')
 
 def event(message):
     STATE['log'].append({'text':message,'at':time.time()}); STATE['log']=STATE['log'][-40:]
@@ -73,7 +76,7 @@ def view():
         STATE['board']=switchboard.initial();save()
     if STATE['training'] and STATE['training']['status']=='running' and time.time()-STATE['training']['started']>=16:
         STATE['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**STATE,'maintenance_route_open':maintenance_access(),'noc':{**STATE['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'serverless_configured':bool(serverless.config(RUNTIME)['project_id'] and serverless.config(RUNTIME)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(STATE['sources']['dataset']),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**STATE,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**STATE['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'serverless_configured':bool(serverless.config(RUNTIME)['project_id'] and serverless.config(RUNTIME)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(STATE['sources']['dataset']),'live_report':None,'token':TOKEN,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=STATE['noc']
@@ -156,11 +159,16 @@ def run_code(kind,source):
     except (ValueError,IndexError): return {'passed':False,'error':'Puzzle did not return a test report. Check syntax and return values.'}
 
 class Handler(BaseHTTPRequestHandler):
-    def json(self,data,status=200):
-        body=json.dumps(data).encode(); self.send_response(status); self.send_header('Content-Type','application/json'); self.send_header('Cache-Control','no-store'); self.send_header('Content-Length',str(len(body))); self.end_headers(); self.wfile.write(body)
+    def json(self,data,status=200,extra_headers=None):
+        body=json.dumps(data).encode(); self.send_response(status); self.send_header('Content-Type','application/json'); self.send_header('Cache-Control','no-store'); self.send_header('X-Content-Type-Options','nosniff'); self.send_header('Content-Length',str(len(body)))
+        for key,value in (extra_headers or {}).items(): self.send_header(key,value)
+        self.end_headers(); self.wfile.write(body)
     def do_GET(self):
         path=urlparse(self.path).path
+        if path=='/healthz': self.json({'ok':True});return
+        if path=='/api/leaderboard': self.json({'entries':hosting.leaderboard(RUNTIME)});return
         if path=='/api/state':
+            if not hosting.authenticated(self.headers): self.json({'authenticated':False,'hosted':hosting.hosted()});return
             with LOCK:
                 n=STATE['noc'];job=n.get('submission') or {}
                 if job.get('id') and job.get('status') not in ('succeeded','failed','cancelled') and time.time()-n.get('polled_at',0)>=20 and (n.get('operation') or {}).get('status')!='running':
@@ -170,11 +178,23 @@ class Handler(BaseHTTPRequestHandler):
         files={'/controller.py':('cloud_controller.py','text/plain'),'/training-replay.json':('web/training-replay.json','application/json'),'/plant.js':('web/plant.js','text/javascript'),'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
         if path not in files: self.send_error(404); return
         file,mime=files[path]; data=(ROOT/file).read_bytes()
-        self.send_response(200);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(data)));self.send_header('X-Content-Type-Options','nosniff');self.end_headers();self.wfile.write(data)
+        self.send_response(200);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(data)));self.send_header('X-Content-Type-Options','nosniff');self.send_header('Cache-Control','no-cache');self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'");self.end_headers();self.wfile.write(data)
     def do_POST(self):
-        if self.headers.get('X-Game-Token')!=TOKEN: self.json({'error':'Refresh the page to reconnect.'},403);return
+        path=urlparse(self.path).path
         origin=self.headers.get('Origin')
         if origin and urlparse(origin).netloc!=self.headers.get('Host'): self.json({'error':'Cross-origin request refused.'},403);return
+        if path=='/api/login':
+            try:
+                length=int(self.headers.get('Content-Length',0))
+                if not 0<length<=1024:raise ValueError('Invalid sign-in request.')
+                body=json.loads(self.rfile.read(length));cookie=hosting.login(body.get('code',''),self.client_address[0])
+                self.json({'ok':True},extra_headers={'Set-Cookie':cookie})
+            except (ValueError,TypeError,KeyError):self.json({'error':'Host code did not match, or too many attempts. Wait one minute before trying again.'},401)
+            return
+        if not hosting.authenticated(self.headers): self.json({'error':'Sign in with your host code to control this run.'},401);return
+        if self.headers.get('X-Game-Token')!=TOKEN: self.json({'error':'Refresh the page to reconnect.'},403);return
+        if hosting.hosted() and path in ('/api/check','/api/repair','/api/calibrate','/api/baseline','/api/train','/api/deploy','/api/evaluate','/api/dataset'):
+            self.json({'error':'This retired local-editor route is disabled in the hosted game.'},403);return
         try:
             length=int(self.headers.get('Content-Length',0))
             if urlparse(self.path).path=='/api/noc/import':
@@ -184,7 +204,7 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     launch_noc('load-own',{'uploaded':uploaded});save();self.json({'state':view()})
                 return
-            if length>50000: raise ValueError('Request too large.')
+            if not 0<=length<=50000: raise ValueError('Invalid request size.')
             body=json.loads(self.rfile.read(length) or b'{}')
             with LOCK:
                 result=self.action(urlparse(self.path).path,body);save();self.json({'state':view(),**(result or {})})
@@ -194,13 +214,16 @@ class Handler(BaseHTTPRequestHandler):
     def action(self,path,b):
         global STATE
         if path=='/api/start':
+            if not STATE['started']: STATE['player_name']=hosting.player_name(b.get('name') or ('Night shift' if not hosting.hosted() else ''))
             if not STATE['started']: STATE['started']=time.time();STATE['paused']=False;STATE['pause_at']=None;STATE['pause_total']=0;event('You accepted the pager. Forty-five minutes until midnight.')
         elif path=='/api/host':
             act=b['action']
             if act in ('caretaker-backup','caretaker-prompt'):
+                hosting.practice(STATE,'Host model experiment')
                 launch_noc('backup' if act=='caretaker-backup' else 'prompt-profile',{'host_override':True})
             elif act=='reset': STATE=fresh()
             elif act=='pause':
+                hosting.practice(STATE,'Timer paused')
                 if not STATE['paused']: STATE['pause_at']=time.time();STATE['paused']=True
                 else: STATE['pause_total']+=time.time()-STATE['pause_at'];STATE['paused']=False;STATE['pause_at']=None
             elif act in ('live','rehearsal'):
@@ -209,6 +232,7 @@ class Handler(BaseHTTPRequestHandler):
                     sources=STATE['sources'];STATE=fresh();STATE['sources']=sources;STATE['mode']=act
                     event(f'Mode changed to {act}. Gates and timer reset; code edits retained.')
         elif path=='/api/solution':
+            hosting.practice(STATE,'Host solution used')
             kind=b['kind']
             if kind not in ('retry','dataset','guard'): raise ValueError('Unknown solution.')
             return {'source': {'retry':content.RETRY_SOLUTION,'guard':content.RUNBOOK_SOLUTION,'dataset':'\n'.join(json.dumps(r) for r in content.clean_records())}[kind], 'settings': {'fallback':60,'floor':0,'direction':'until'} if kind=='retry' else None, 'routes': {k:v['protocol'] for k,v in switchboard.GHOSTS.items()} if kind=='retry' else None}
@@ -289,11 +313,13 @@ class Handler(BaseHTTPRequestHandler):
                 if not STATE['rooms'][0] or not STATE['rooms'][1]:raise ValueError('Restore communications and certify the caretaker before releasing the exit.')
                 if not report.get('passed') or not report.get('request_nonce') or report.get('endpoint_id')!=(p.get('endpoint') or {}).get('id') or report.get('board_hash')!=plant.fingerprint(board) or not plant.check_pipes(board)['passed']:raise ValueError('Complete the circuit, deploy the controller, and pass its live cooling test with this layout.')
                 STATE['rooms'][2]=True;STATE['escaped']=True;STATE['finished']=time.time();event('Closed cooling circuit stable. Cloud controller healthy. Everyone leaves together.')
+                STATE['result']=hosting.record(STATE,RUNTIME)
             else:raise ValueError('Unknown generator-room action.')
         elif path.startswith('/api/noc/'):
             action=path.rsplit('/',1)[1]
             if action in ('backup','prompt-profile'):raise ValueError('Fallbacks and prompt experiments are available in host controls only.')
             if action=='playtest':
+                hosting.practice(STATE,'Room playtest shortcut')
                 STATE['noc']['playtest']=True;STATE['noc']['revision']+=1
                 STATE['started']=time.time();STATE['paused']=False;STATE['pause_at']=None;STATE['pause_total']=0;STATE.pop('finished',None)
             elif action in ('evidence','rehearse','try-probe'):
@@ -384,8 +410,9 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args): pass
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=8765);args=parser.parse_args()
-    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
-    print(f'Haunted Datacenter: http://127.0.0.1:{args.port}',flush=True)
+    hosting.validate_config()
+    parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=int(os.environ.get('PORT','8765')));parser.add_argument('--host',default=os.environ.get('HOST','127.0.0.1'));args=parser.parse_args()
+    server=ThreadingHTTPServer((args.host,args.port),Handler)
+    print(f'Haunted Datacenter: http://{args.host}:{args.port}',flush=True)
     try: server.serve_forever()
     except KeyboardInterrupt: print('\nShift ended.')

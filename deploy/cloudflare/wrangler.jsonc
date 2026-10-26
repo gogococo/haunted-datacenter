@@ -1,0 +1,17 @@
+{
+  "name": "haunted-datacenter-edge",
+  "account_id": "651a574ea2b79a5c999046655d99c3fa",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-26",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "halloween.curiousjaxx.dev",
+      "custom_domain": true
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

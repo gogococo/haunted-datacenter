@@ -13,9 +13,13 @@ export NEBIUS_SUBNET_ID='YOUR_SUBNET'
 python3 server.py
 ```
 
-Open http://127.0.0.1:8765 and click **Play**. Keep credentials in the server environment. The game binds to loopback and saves progress in `.runtime/`. The gear menu starts a genuinely fresh incident, including an untrained caretaker and new room gates.
+Open http://127.0.0.1:8765, enter a display name, and click **Play**. Keep credentials in the server environment. The game binds to loopback and saves progress in `.runtime/`. The gear menu starts a genuinely fresh incident, including an untrained caretaker and new room gates.
 
 **Cloud resources survive a game reset.** Each full playthrough submits one real fine-tuning job and creates one real CPU Serverless endpoint. A repeated click cannot submit another resource while a submission is pending or its outcome is uncertain. Manage completed jobs and stop unneeded endpoints in the cloud console. Runtime receipts retain their IDs across resets.
+
+## Hosting and leaderboard
+
+The stream release supports one host-controlled incident, with a display name, run UUID and persistent leaderboard. Co-op interaction remains a TODO. See [deployment and local Docker instructions](deploy/README.md) for host sign-in, persistence and ranking rules. Runtime credentials never belong in Git.
 
 ## Room 1: research, inspect, apply
 
@@ -96,7 +100,7 @@ Documentation: https://docs.nebius.com/serverless/quickstart/endpoints
 ## Verification
 
 ```sh
-python3 -m unittest -q test_game test_caretaker test_plant test_upgrade test_checkpoint_flow
+GAME_DATA_DIR=$(mktemp -d) python3 -m unittest -q test_game test_caretaker test_plant test_upgrade test_checkpoint_flow test_hosting
 ```
 
 Automated tests mock external APIs. Separate browser/integration playtests use real Tavily Search + Extract, Token Factory vision and training, the prepared adapter, and the actual deployed CPU application.
