@@ -124,15 +124,16 @@ def reap(runtime):
     if pool.get('shared') and pool.get('state') not in ('STOPPED','STOPPING') and not _leases(pool):
         return release(runtime,pool.get('lease'),idle=True)
 
-def _remember(p,row,runtime,lease,shared=False):
+def _remember(p,row,runtime,lease,shared=False,lease_started=0):
     c=config(runtime);identifier=row['metadata']['id'];values=_row_settings(row)
     token=row.get('spec',{}).get('auth_token') or _read(private_path(runtime,identifier)).get('token')
     if not token:raise ValueError('The existing controller has no available private access token. Check its cloud configuration before replacing it.')
-    receipt={'id':identifier,'name':row['metadata']['name'],'project_id':c['project_id'],'token':token,**values,'lease':lease,'state':row.get('status',{}).get('state','STARTING')}
+    receipt={'id':identifier,'name':row['metadata']['name'],'project_id':c['project_id'],'token':token,**values,'lease':lease,'lease_started':lease_started,'state':row.get('status',{}).get('state','STARTING')}
     previous=_read(_pool_path(runtime))
     if shared or previous.get('shared'):
         receipt.update(shared=True,leases=_leases(previous))
-        if lease:receipt['leases'][lease]=time.time()
+        receipt['claims']={key:previous.get('claims',{}).get(key,0) for key in receipt['leases']}
+        if lease:receipt['leases'][lease]=time.time();receipt['claims'][lease]=lease_started
     _write(private_path(runtime,identifier),receipt);_write(_pool_path(runtime),receipt)
     p['endpoint']={**public(row),'config':values,'reused':True};p['deployment_unknown']=False;p['health']=None;p['report']=None
     return receipt
@@ -162,6 +163,7 @@ def _stop(row,runtime):
         receipt.update(state='STOPPED',cleanup_error=None);_write(_pool_path(runtime),receipt)
 
 def _deploy(p,body,runtime,lease,replace=False,shared=False):
+    lease_started=time.time()
     if _cancelled(runtime,lease):raise ValueError('This shift has ended. The controller was not started.')
     if p.get('deployment_unknown'):raise ValueError('A deployment had an uncertain result. Check Serverless AI in the console before submitting another.')
     c=config(runtime);values=_settings({**(p.get('endpoint') or {}).get('config',{}),**body})
@@ -170,7 +172,7 @@ def _deploy(p,body,runtime,lease,replace=False,shared=False):
     if replace and not candidates:raise ValueError('There is no game-owned controller to replace.')
     selected=candidates[0] if candidates else None
     if selected:
-        _remember(p,selected,runtime,lease,shared)
+        _remember(p,selected,runtime,lease,shared,lease_started)
         pending=runtime/'serverless/pending.json'
         if _read(pending).get('name') in {r['metadata']['name'] for r in candidates}:pending.unlink(missing_ok=True)
         # Clean up only positively identified controllers from old game versions.
@@ -215,8 +217,8 @@ def _deploy(p,body,runtime,lease,replace=False,shared=False):
     result=cli(args)
     identifier=result.get('resource_id') or result.get('resourceId') or result.get('metadata',{}).get('id')
     if not identifier:raise ValueError('Create returned no endpoint ID. Inspect the console; do not submit another deployment.')
-    receipt={'id':identifier,'name':name,'token':token,'project_id':c['project_id'],**values,'lease':lease,'state':'STARTING','created_at':time.time()}
-    if shared:receipt.update(shared=True,leases={lease:time.time()} if lease else {})
+    receipt={'id':identifier,'name':name,'token':token,'project_id':c['project_id'],**values,'lease':lease,'lease_started':lease_started,'state':'STARTING','created_at':time.time()}
+    if shared:receipt.update(shared=True,leases={lease:time.time()} if lease else {},claims={lease:lease_started} if lease else {})
     _write(private_path(runtime,identifier),receipt);_write(_pool_path(runtime),receipt);pending.unlink(missing_ok=True)
     p['endpoint']={'id':identifier,'name':name,'state':'STARTING','url':'','config':values,'reused':False}
     p['deployment_unknown']=False;p['health']=None;p['report']=None
@@ -228,6 +230,7 @@ def deploy(p,body,runtime,lease=None,shared=False):
 def release(runtime,lease,endpoint=None,idle=False):
     """Nonblocking cleanup. A stale reset cannot stop a newer shift's lease."""
     if not lease:return
+    released_at=time.time()
     if not idle:
         with _RELEASE_LOCK:_RELEASED.add((str(runtime.resolve()),lease))
     def worker():
@@ -241,6 +244,7 @@ def release(runtime,lease,endpoint=None,idle=False):
                     if owned(row,project):pool=_remember({},row,runtime,lease)
                 if not pool or pool.get('project_id')!=project:return
                 if pool.get('shared'):
+                    if pool.get('claims',{}).get(lease,0)>released_at:return
                     leases=_leases(pool);leases.pop(lease,None);pool['leases']=leases;_write(_pool_path(runtime),pool)
                     if leases:return
                 elif pool.get('lease')!=lease:return

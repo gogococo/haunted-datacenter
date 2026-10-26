@@ -104,6 +104,12 @@ class SharedRunnerTests(unittest.TestCase):
    jobs=[pool.submit(caretaker.run,'test',n,{},'',Path('/runtime')/n['job']['id'],lambda _:None) for n in (a,b)]
    [j.result() for j in jobs]
   self.assertCountEqual(seen,[('alice','alice'),('bob','bob')])
+ def test_identical_weights_from_different_jobs_still_restore_the_players_own_receipt(self):
+  n={'route':'finetuned','runner':{'active':True,'artifact_hash':'same-weights'},'job':{'id':'alice'}}
+  health={'artifact_hash':'same-weights','job_id':'bob'}
+  with patch.object(caretaker,'runner_call',return_value=health),patch.object(checkpoint_flow,'reload_runner',return_value={'artifact_hash':'same-weights','job_id':'alice'}) as load,patch.object(caretaker,'_run',return_value='done'):
+   caretaker.run('test',n,{},'',Path('/runtime/alice'),lambda _:None)
+  load.assert_called_once()
  def test_new_players_connection_does_not_copy_another_players_checkpoint_receipt(self):
   health={'ready':True,'model':'small','device':'cpu','artifact_hash':'bobs-weights','job_id':'bobs-job','checkpoint_id':'bobs-checkpoint','has_adapter':True}
   n=caretaker.initial()
@@ -139,6 +145,17 @@ class SharedControllerTests(unittest.TestCase):
    root=Path(d);serverless._write(serverless._pool_path(root),{'id':'existing','project_id':PROJECT,'lease':'old-shift','state':'RUNNING'})
    with patch.object(serverless,'cli') as cli:serverless.enable_shared(root)
    pool=serverless._read(serverless._pool_path(root));self.assertEqual(pool['id'],'existing');self.assertIn('old-shift',pool['leases']);cli.assert_not_called()
+ def test_old_reset_cannot_stop_the_same_uuid_after_an_explicit_new_claim(self):
+  with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,{'NEBIUS_PROJECT_ID':PROJECT,'NEBIUS_SUBNET_ID':'subnet'}):
+   root=Path(d);row=resource();calls=[]
+   def cli(args):calls.append(args);return {'items':[row]} if args[2]=='list' else row if args[2]=='get' else {}
+   with patch.object(serverless,'cli',side_effect=cli):
+    serverless.deploy({}, {},root,'alice',shared=True)
+    with serverless.lifecycle_lock(root):
+     cleanup=serverless.release(root,'alice')
+     pool=serverless._read(serverless._pool_path(root));pool['claims']['alice']=time.time()+1;serverless._write(serverless._pool_path(root),pool)
+    cleanup.join(2)
+   self.assertFalse(any(x[2]=='stop' for x in calls))
  def test_abandoned_leases_expire_and_stop_the_controller(self):
   with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,{'NEBIUS_PROJECT_ID':PROJECT,'NEBIUS_SUBNET_ID':'subnet'}):
    root=Path(d);row=resource();calls=[]

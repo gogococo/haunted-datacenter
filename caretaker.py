@@ -327,7 +327,7 @@ def run(action,n,body,source,runtime,progress):
  with RUNNER_LOCK:
   if (n.get('runner') or {}).get('active') and n.get('route')=='finetuned' and action not in ('load-own','backup'):
    health=runner_call('/health')
-   if health.get('artifact_hash')!=n['runner'].get('artifact_hash'):
+   if health.get('artifact_hash')!=n['runner'].get('artifact_hash') or health.get('job_id')!=(n.get('job') or {}).get('id'):
     job=(n.get('job') or {}).get('id','')
     receipt=runtime/'noc-checkpoints'/hashlib.sha256(job.encode()).hexdigest()[:20]/'receipt.json'
     if n.get('host_override',{}).get('kind')=='backup':
