@@ -125,7 +125,7 @@ def view():
         G.state['board']=switchboard.initial();save()
     if G.state['training'] and G.state['training']['status']=='running' and time.time()-G.state['training']['started']>=16:
         G.state['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**G.state,'timer':hosting.clock(G.state),'has_session':True,'is_host':G.admin,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**G.state['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'cooling_controller':serverless.pool_status(G.root),'serverless_configured':bool(serverless.config(G.root)['project_id'] and serverless.config(G.root)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(G.state['sources']['dataset']),'live_report':None,'token':G.token,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**G.state,'timer':hosting.clock(G.state),'plant':{**G.state['plant'],'commissioned':plant.commissioned(G.state['plant'])},'has_session':True,'is_host':G.admin,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**G.state['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'cooling_controller':serverless.pool_status(G.root),'serverless_configured':bool(serverless.config(G.root)['project_id'] and serverless.config(G.root)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(G.state['sources']['dataset']),'live_report':None,'token':G.token,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=G.state['noc']
@@ -160,7 +160,10 @@ def launch_noc(action,body):
 def launch_plant(action,body):
     p=G.state['plant'];session=G.state['run_id'];lease=G.state['run_id']
     if (p.get('operation') or {}).get('status')=='running':raise ValueError('A cloud request is still running. You can place pipes while deployment submits.')
-    if action in ('deploy','replace'):serverless.allow(G.root,lease)
+    if action in ('deploy','replace'):
+        body={**body,**plant.deployment_values(p,body)}
+        serverless.allow(G.root,lease)
+    elif not plant.commissioned(p):raise ValueError('Read Alex’s maintenance book, enter the three settings, and commission this shift’s controller first.')
     snapshot=copy.deepcopy(p)
     if action in ('deploy','health','test','replace'):snapshot['report']=None
     if action in ('deploy','health','replace'):snapshot['health']=None
@@ -175,13 +178,14 @@ def launch_plant(action,body):
             elif action=='health':message=serverless.health(snapshot,G.root)
             elif action=='logs':message=serverless.logs(snapshot,G.root)
             else:message=serverless.assess(snapshot,G.root,board)
+            if action in ('deploy','replace'):plant.commission(snapshot,{key:body[key] for key in plant.DEPLOYMENT_SETTINGS})
             status='succeeded'
         except (ValueError,OSError,KeyError,TypeError) as error:message=str(error) if isinstance(error,ValueError) else 'Cloud request failed. Check the endpoint in the console.';status='failed'
         except Exception:message='Cloud operation failed. Check the endpoint status and try the specific check again.';status='failed'
         with G.lock:
             if G.state['run_id']!=session:return
             current=G.state['plant']
-            for key in ('endpoint','health','deployment_unknown','cloud_logs','previous_endpoints'):
+            for key in ('endpoint','health','deployment_unknown','cloud_logs','previous_endpoints','commissioning'):
                 if key in snapshot:current[key]=snapshot[key]
             if action=='test':
                 for key in ('settings','pipes','pipe_report','report'):current[key]=snapshot.get(key)
@@ -231,7 +235,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as error:self.json({'error':str(error)},404)
     def get(self):
         path=urlparse(self.path).path
-        if path=='/healthz': self.json({'ok':True,'version':'shift-entry-v3'});return
+        if path=='/healthz': self.json({'ok':True,'version':'controller-book-v4'});return
         if path=='/api/leaderboard': self.json({'entries':[{k:v for k,v in row.items() if k!='run_id'} for row in hosting.leaderboard(G.root)]});return
         if path=='/api/state':
             if not self.has_game:self.json({'authenticated':True,'hosted':hosting.hosted(),'has_session':False,'is_host':False});return
@@ -401,6 +405,9 @@ class Handler(BaseHTTPRequestHandler):
             if action in ('deploy','refresh','health','test','logs','replace'):
                 if not maintenance_access() and not G.state['noc'].get('playtest'):raise ValueError('Submit the caretaker training job before entering the generator room.')
                 launch_plant(action,b)
+            elif action=='book':
+                p['maintenance_book_read']=True;p['revision']+=1
+                return {'message':'Alex’s maintenance book is open. The commissioning limits are inside.'}
             elif action=='pipes':
                 if (p.get('operation') or {}).get('action')=='test' and p['operation']['status']=='running':raise ValueError('Wait for the cooling test before editing pipes.')
                 board=plant.normalize(b.get('pipes',{}));p['pipes']=board;p['pipe_report']=plant.check_pipes(board);p['report']=None
@@ -408,6 +415,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action=='escape':
                 board=plant.normalize(b.get('pipes',{}));report=p.get('report') or {}
                 if not G.state['rooms'][0] or not G.state['rooms'][1]:raise ValueError('Restore communications and certify the caretaker before releasing the exit.')
+                if not plant.commissioned(p):raise ValueError('Commission this controller using the settings in Alex’s maintenance book before releasing the exit.')
                 if not report.get('passed') or not report.get('request_nonce') or report.get('endpoint_id')!=(p.get('endpoint') or {}).get('id') or report.get('board_hash')!=plant.fingerprint(board) or not plant.check_pipes(board)['passed']:raise ValueError('Complete the circuit, deploy the controller, and pass its live cooling test with this layout.')
                 G.state['rooms'][2]=True;G.state['escaped']=True;G.state['finished']=time.time();event('Closed cooling circuit stable. Cloud controller healthy. Everyone leaves together.')
                 G.state['result']=hosting.record(G.state,G.root)

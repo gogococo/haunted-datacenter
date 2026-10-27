@@ -1,5 +1,5 @@
 """Generator room: pipe routing and a small, measured cooling-controller simulator."""
-import hashlib,json,time
+import hashlib,json,time,math
 COLS,ROWS=6,5
 PORTS={'straight':(0,2),'elbow':(0,1)}
 INVENTORY={'straight':2,'elbow':4}
@@ -7,8 +7,35 @@ ANCHORS={13:{'kind':'straight','rotation':0,'role':'pump'},9:{'kind':'straight',
 BLOCKED={14,15}
 DEFAULT_SETTINGS={'fan_profile':'quiet','pump_mode':'off','alarms':'keep'}
 VERSION='plant-v2'
+COMMISSIONING_VERSION='maintenance-book-v1'
+DEPLOYMENT_SETTINGS={'port':8000,'target':75.0,'budget':12.0}
 
-def initial():return {'version':VERSION,'revision':0,'pipes':{},'pipe_report':None,'settings':DEFAULT_SETTINGS.copy(),'report':None,'advice':None,'operation':None,'endpoint':None,'health':None,'deployment_unknown':False}
+def initial():return {'version':VERSION,'revision':0,'pipes':{},'pipe_report':None,'settings':DEFAULT_SETTINGS.copy(),'report':None,'advice':None,'operation':None,'endpoint':None,'health':None,'deployment_unknown':False,'maintenance_book_read':False,'commissioning':None}
+
+def deployment_values(p,body):
+ """A player supplies all three settings; cloud metadata is never an answer key."""
+ if not p.get('maintenance_book_read'):raise ValueError('Find Alex’s maintenance book on the backup generator before configuring this controller.')
+ values={};labels={'port':'App port','target':'Temperature limit','budget':'Power budget'}
+ for key,label in labels.items():
+  raw=body.get(key)
+  if raw is None or str(raw).strip()=='':raise ValueError('Enter all three settings from the maintenance book. No defaults are filled in.')
+  try:value=float(raw)
+  except (ValueError,TypeError):raise ValueError(label+' must be a number.') from None
+  if not math.isfinite(value) or isinstance(raw,bool):raise ValueError(label+' must be a finite number.')
+  if key=='port' and not value.is_integer():raise ValueError('App port must be a whole number.')
+  values[key]=int(value) if key=='port' else value
+ wrong=[label for key,label in labels.items() if values[key]!=DEPLOYMENT_SETTINGS[key]]
+ if wrong:raise ValueError('Check '+', '.join(wrong).lower()+' against Alex’s maintenance book. The controller has not been changed.')
+ return values
+
+def commission(p,values):
+ ep=p.get('endpoint') or {}
+ if not ep.get('id') or ep.get('config')!=values:raise ValueError('The cloud controller does not match this shift’s commissioning settings.')
+ p['commissioning']={'version':COMMISSIONING_VERSION,'endpoint_id':ep['id'],'settings':values.copy(),'at':time.time()}
+
+def commissioned(p):
+ ep=p.get('endpoint') or {};receipt=p.get('commissioning') or {}
+ return bool(p.get('maintenance_book_read') and ep.get('id') and receipt.get('version')==COMMISSIONING_VERSION and receipt.get('endpoint_id')==ep['id'] and receipt.get('settings')==DEPLOYMENT_SETTINGS and ep.get('config')==DEPLOYMENT_SETTINGS)
 def definition():return {'cols':COLS,'rows':ROWS,'anchors':ANCHORS,'blocked':sorted(BLOCKED),'inventory':INVENTORY}
 def label(cell):return chr(65+cell%COLS)+str(cell//COLS+1)
 def ports(tile):return {(p+tile['rotation'])%4 for p in PORTS[tile['kind']]}
