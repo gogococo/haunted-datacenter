@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlparse,parse_qs
 import content
 import caretaker, copy
-import switchboard,clue_post,plant,lessons,serverless,hosting,sessions
+import switchboard,clue_post,plant,lessons,serverless,hosting,sessions,telemetry
 
 ROOT=Path(__file__).resolve().parent
 RUNTIME=Path(os.environ.get('GAME_DATA_DIR',str(ROOT/'.runtime'))); RUNTIME.mkdir(parents=True,exist_ok=True)
@@ -106,6 +106,7 @@ def maintenance_access():
 
 def save():
     temp=G.runtime/'state.tmp'; temp.write_text(json.dumps(G.state)); temp.chmod(0o600); temp.replace(G.runtime/'state.json')
+    telemetry.observe(G.root,G.state)
 
 def event(message):
     G.state['log'].append({'text':message,'at':time.time()}); G.state['log']=G.state['log'][-40:]
@@ -134,6 +135,7 @@ def view():
     return {**G.state,'timer':hosting.clock(G.state),'plant':{**G.state['plant'],'commissioned':plant.commissioned(G.state['plant'])},'has_session':True,'is_host':G.admin,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**G.state['noc'],'maintenance_notes':lessons.catalog(G.state['noc'])},'maintenance_notes':lessons.catalog(G.state['noc']),'cooling_controller':serverless.pool_status(G.root),'serverless_configured':bool(serverless.config(G.root)['project_id'] and serverless.config(G.root)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(G.state['sources']['dataset']),'live_report':None,'token':G.token,'tavily_available':bool(__import__('shutil').which('tvly')),'training_backend':'serverless' if caretaker.training_cloud.configured() else 'tokenfactory','personalities':caretaker.PERSONALITIES,'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
+    operation_started=time.monotonic()
     noc=G.state['noc']
     if (noc.get('operation') or {}).get('status')=='running':raise ValueError('The caretaker is already working. Wait for the current operation.')
     snapshot=copy.deepcopy(noc);source=G.state['sources']['dataset'];session=G.state['run_id']
@@ -156,6 +158,9 @@ def launch_noc(action,body):
             if G.state['run_id']!=session:
                 (G.runtime/('noc-recovered-'+str(session)+'-'+action+'.json')).write_text(json.dumps({'action':action,'status':status,'noc':snapshot}))
                 return
+            telemetry.cloud(G.root,G.state,'noc',action,status,time.monotonic()-operation_started)
+            step={'inspect':'camera','vision':'camera','probe':'baseline','test':'baseline','train':'training','load-own':'checkpoint','verify':'exam','final':'exam'}.get(action)
+            if step:telemetry.attempt(G.root,G.state,step,(snapshot.get('final') or {}).get('passed') if step=='exam' else status=='succeeded')
             snapshot['operation']={'action':action,'status':status,'message':message,'finished':time.time()}
             snapshot['revision']=G.state['noc']['revision']+1;G.state['noc']=snapshot
             if action in ('final','verify'):G.state['rooms'][1]=bool(status=='succeeded' and snapshot.get('final',{}).get('passed'))
@@ -164,6 +169,7 @@ def launch_noc(action,body):
 
 
 def launch_plant(action,body):
+    operation_started=time.monotonic()
     p=G.state['plant'];session=G.state['run_id'];lease=G.state['run_id']
     if (p.get('operation') or {}).get('status')=='running':raise ValueError('A cloud request is still running. You can place pipes while deployment submits.')
     if action in ('deploy','replace'):
@@ -195,6 +201,9 @@ def launch_plant(action,body):
                 if key in snapshot:current[key]=snapshot[key]
             if action=='test':
                 for key in ('settings','pipes','pipe_report','report'):current[key]=snapshot.get(key)
+            telemetry.cloud(G.root,G.state,'plant',action,status,time.monotonic()-operation_started)
+            step={'deploy':'commissioning','health':'health','test':'cooling'}.get(action)
+            if step:telemetry.attempt(G.root,G.state,step,bool(status=='succeeded' and (snapshot.get('report') or {}).get('passed')) if action=='test' else status=='succeeded')
             current['operation']={'action':action,'status':status,'message':message,'finished':time.time()};current['revision']+=1;save()
     background(worker)
 
@@ -206,6 +215,7 @@ def exit_status(state):
             'cooling_healthy':bool(report.get('passed') and report.get('request_nonce') and report.get('endpoint_id')==ep.get('id') and report.get('board_hash')==plant.fingerprint(p.get('pipes',{})) and report.get('settings')==p.get('settings'))}
 
 def launch_exit():
+    operation_started=time.monotonic()
     n=G.state['noc'];p=G.state['plant']
     if not G.state['rooms'][0] or not G.state['rooms'][1]:raise ValueError('Load your trained caretaker and pass his practical exam first. His terminal is beside the controller.')
     if (n.get('operation') or {}).get('status')=='running' or (p.get('operation') or {}).get('status')=='running':raise ValueError('Let the current inspection finish before asking for the exit.')
@@ -239,6 +249,8 @@ def launch_exit():
                 G.state['result']=hosting.record(G.state,G.root)
                 serverless.release(G.root,G.state['run_id'],copy.deepcopy(G.state['plant'].get('endpoint')))
             elif approved and not unchanged:current['operation'].update(status='failed',message='The controls changed during inspection. Ask the caretaker to inspect the current building again.')
+            telemetry.cloud(G.root,G.state,'noc','release-exit',status,time.monotonic()-operation_started)
+            telemetry.attempt(G.root,G.state,'exit',bool(G.state.get('escaped')))
             save()
     background(worker)
 
@@ -272,7 +284,7 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self,handler):
         path=urlparse(self.path);value=self.headers.get('X-Run-ID') or parse_qs(path.query).get('run',[None])[0]
         admin=hosting.authenticated(self.headers)
-        if path.path=='/api/host/access':
+        if path.path in ('/api/host/access','/api/host/analytics'):
             if not admin:self.json({'error':'Host access required.'},403);return
             with sessions.scope(None,admin):handler()
             return
@@ -294,6 +306,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as error:self.json({'error':str(error)},404)
     def get(self):
         path=urlparse(self.path).path
+        if path=='/api/host/analytics':
+            self.json({**telemetry.status(RUNTIME),'token':hosting.access_token()});return
         if path=='/api/host/access':
             self.json({'require_host_code':hosting.requires_player_login(RUNTIME),'token':hosting.access_token()});return
         if path=='/healthz': self.json({'ok':True,'version':'caretaker-queue-v6'});return
@@ -310,6 +324,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not hosting.clock(G.state)['expired'] and job.get('id') and job.get('status') not in ('succeeded','failed','cancelled') and time.time()-n.get('polled_at',0)>=20 and (n.get('operation') or {}).get('status')!='running':
                     n['polled_at']=time.time();launch_noc('refresh',{})
                 if not G.state.get('escaped') and not hosting.clock(G.state)['expired']:serverless.touch(G.root,G.state['run_id'])
+                telemetry.observe(G.root,G.state)
                 self.json(view())
             return
         files={'/controller.py':('cloud_controller.py','text/plain'),'/training-replay.json':('web/training-replay.json','application/json'),'/plant.js':('web/plant.js','text/javascript'),'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
@@ -320,13 +335,15 @@ class Handler(BaseHTTPRequestHandler):
         path=urlparse(self.path).path
         origin=self.headers.get('Origin')
         if origin and urlparse(origin).netloc!=self.headers.get('Host'): self.json({'error':'Cross-origin request refused.'},403);return
-        if path=='/api/host/access':
+        if path in ('/api/host/access','/api/host/analytics'):
             if not secrets.compare_digest(self.headers.get('X-Host-Token',''),hosting.access_token()):self.json({'error':'Reopen Host controls to reconnect.'},403);return
             try:
                 length=int(self.headers.get('Content-Length',0))
                 if not 0<length<=1024:raise ValueError('Invalid access setting.')
                 body=json.loads(self.rfile.read(length))
                 if not isinstance(body,dict):raise ValueError('Invalid access setting.')
+                if path=='/api/host/analytics':
+                    self.json(telemetry.configure(RUNTIME,body));return
                 hosting.set_player_login(RUNTIME,body.get('require_host_code'))
                 self.json({'require_host_code':hosting.requires_player_login(RUNTIME)})
             except (ValueError,TypeError) as error:self.json({'error':str(error)},400)
@@ -350,6 +367,7 @@ class Handler(BaseHTTPRequestHandler):
                 hosting.allow_new_shift(self.client_address[0])
                 name=hosting.player_name(body.get('name',''))
                 game=sessions.create(RUNTIME,fresh,name,start=True)
+                telemetry.observe(RUNTIME,game.state,new=True,visitor=body.get('visitor'))
                 warm_existing_controller(RUNTIME,game.state['run_id'])
                 with sessions.scope(game,G.admin):self.json({'state':view()})
             except (ValueError,TypeError) as error:self.json({'error':str(error) if isinstance(error,ValueError) else 'Enter a display name between 1 and 40 characters.'},400)
@@ -360,8 +378,17 @@ class Handler(BaseHTTPRequestHandler):
             self.json({'error':'This game’s 45 minutes are up. Start a new game.', 'expired':True},410);return
         if hosting.hosted() and path in ('/api/check','/api/repair','/api/calibrate','/api/baseline','/api/train','/api/deploy','/api/evaluate','/api/dataset'):
             self.json({'error':'This retired local-editor route is disabled in the hosted game.'},403);return
+        request_started=time.monotonic();body={}
         try:
             length=int(self.headers.get('Content-Length',0))
+            if path=='/api/activity':
+                if not 0<length<=512:raise ValueError('Invalid activity event.')
+                body=json.loads(self.rfile.read(length))
+                if not isinstance(body,dict):raise ValueError('Invalid activity event.')
+                with G.lock:
+                    telemetry.activity(G.root,G.state,body.get('room'),body.get('object'),body.get('visible') is True)
+                    if body.get('hint') is True:telemetry.hint(G.root,G.state,body.get('room'))
+                self.json({'ok':True});return
             if urlparse(self.path).path=='/api/noc/import':
                 if not 0<length<=64*1024*1024:raise ValueError('Choose a LoRA adapter under 64 MiB.')
                 uploaded=self.rfile.read(length)
@@ -373,9 +400,13 @@ class Handler(BaseHTTPRequestHandler):
             body=json.loads(self.rfile.read(length) or b'{}')
             if not isinstance(body,dict):raise ValueError('Use a JSON object for this request.')
             with G.lock:
-                result=self.action(urlparse(self.path).path,body);save();self.json({'state':view(),**(result or {})})
-        except subprocess.TimeoutExpired: self.json({'error':'Operation timed out. Your progress is saved.'},408)
-        except (ValueError,KeyError,TypeError,FileNotFoundError) as e:self.json({'error':str(e)},400)
+                result=self.action(urlparse(self.path).path,body);telemetry.action(G.root,G.state,path,body,result,duration=time.monotonic()-request_started);save();self.json({'state':view(),**(result or {})})
+        except subprocess.TimeoutExpired:
+            telemetry.action(G.root,G.state,path,body,rejected=True,duration=time.monotonic()-request_started)
+            self.json({'error':'Operation timed out. Your progress is saved.'},408)
+        except (ValueError,KeyError,TypeError,FileNotFoundError) as e:
+            telemetry.action(G.root,G.state,path,body,rejected=True,duration=time.monotonic()-request_started)
+            self.json({'error':str(e)},400)
         except Exception as e:self.json({'error':f'Operation failed ({type(e).__name__}). Check the local terminal.'},500)
     def action(self,path,b):
         if hosting.clock(G.state)['expired'] and not (path=='/api/host' and b.get('action')=='reset'):
@@ -386,6 +417,7 @@ class Handler(BaseHTTPRequestHandler):
             if not G.state['started']: G.state['player_name']=hosting.player_name(b.get('name') or ('Night shift' if not hosting.hosted() else ''))
             if not G.state['started']:
                 G.state['started']=time.time();G.state['paused']=False;G.state['pause_at']=None;G.state['pause_total']=0;event('You accepted the pager. Forty-five minutes until midnight.')
+                telemetry.observe(G.root,G.state,new=True,visitor=b.get('visitor'))
                 warm_existing_controller(G.root,G.state['run_id'])
         elif path=='/api/resume':
             if not hosting.clock(G.state)['resumable']:raise ValueError('This shift cannot be resumed. Start a new game.')
@@ -599,6 +631,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     hosting.validate_config()
+    telemetry.start(RUNTIME)
     parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=int(os.environ.get('PORT','8765')));parser.add_argument('--host',default=os.environ.get('HOST','127.0.0.1'));args=parser.parse_args()
     serverless.enable_shared(RUNTIME)
     server=ThreadingHTTPServer((args.host,args.port),Handler)

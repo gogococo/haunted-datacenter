@@ -2,7 +2,7 @@ import copy, json, os, tempfile, threading, unittest, urllib.error, urllib.reque
 from pathlib import Path
 from unittest.mock import patch
 from http.server import ThreadingHTTPServer
-import hosting, server
+import hosting, server, telemetry
 
 class ClockTests(unittest.TestCase):
     def test_resume_stops_at_exactly_45_minutes(self):
@@ -67,6 +67,25 @@ class HostedHTTPTests(unittest.TestCase):
         req=urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,headers=headers)
         with urllib.request.urlopen(req) as r:return json.load(r),dict(r.headers)
     def login(self):return self.request('/api/login',{'code':'test-host-access-code'})[1]['Set-Cookie'].split(';')[0]
+    def test_analytics_setup_is_host_only_and_does_not_return_ingestion_key(self):
+        with self.assertRaises(urllib.error.HTTPError) as e:self.request('/api/host/analytics')
+        self.assertEqual(e.exception.code,403)
+        cookie=self.login();settings=self.request('/api/host/analytics',cookie=cookie)[0]
+        self.assertFalse(settings['enabled']);self.assertNotIn('key',settings)
+        with self.assertRaises(urllib.error.HTTPError) as e:self.request('/api/host/analytics',{'enabled':True},cookie)
+        self.assertEqual(e.exception.code,403)
+        req=urllib.request.Request(self.base+'/api/host/analytics',data=json.dumps({'enabled':True,'region':'us','key':'phc_testing_public_token','project_url':'https://us.posthog.com/project/1'}).encode(),headers={'Cookie':cookie,'X-Host-Token':settings['token'],'Content-Type':'application/json'})
+        with urllib.request.urlopen(req) as r:
+            result=json.load(r);self.assertTrue(result['configured']);self.assertNotIn('key',result)
+        self.assertIsNone(server.STATE['started'])
+    def test_activity_requires_game_token_and_cannot_supply_arbitrary_events(self):
+        cookie=self.login();state=self.request('/api/start',{'name':'Alex'},cookie)[0]['state']
+        req=urllib.request.Request(self.base+'/api/activity',data=b'{"room":"1"}',headers={'Cookie':cookie,'Content-Type':'application/json'})
+        with self.assertRaises(urllib.error.HTTPError) as e:urllib.request.urlopen(req)
+        self.assertEqual(e.exception.code,403)
+        self.request('/api/activity',{'room':'1','object':'speaker','visible':True,'event':'INJECTED','query':'PRIVATE INPUT'},cookie)
+        with telemetry.connect(server.RUNTIME) as db:events=' '.join(r[0] for r in db.execute('SELECT payload FROM events'))
+        self.assertIn('haunted_room_entered',events);self.assertNotIn('INJECTED',events);self.assertNotIn('PRIVATE INPUT',events)
     def test_access_defaults_public_even_with_obsolete_environment_flag(self):
         with patch.dict(os.environ,{'REQUIRE_HOST_CODE':'true'}):
             self.assertFalse(hosting.requires_player_login(server.RUNTIME))

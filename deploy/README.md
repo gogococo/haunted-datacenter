@@ -112,3 +112,15 @@ Six concurrent requests using three older checkpoints also retained the expected
 ## Livestream access and Room 1 playtest release
 
 This release passed 194 backend tests and six edge tests. Browser checks covered the code-gated entry, empty research field, shortened bookmark and direct debug navigation through all three rooms. The deployed API rejected anonymous game creation and UUID reads, accepted the existing host code, and returned an ephemeral debug snapshot. A previously completed save and the full leaderboard matched their pre-release snapshots. Debug preview did not submit training or create a game.
+
+## PostHog Cloud analytics
+
+Unlock Host controls and open **Analytics · PostHog**. Enter the US/EU region, project URL and public project ingestion key (`phc_…`), then enable sending. The key stays in the private save volume, outside Git, and is never returned by the settings API. No extra VM or browser SDK is required.
+
+The app records explicit game starts, room entries/completions, puzzle attempts, hints, training turnaround and cloud-operation outcomes. Separate anonymous browser IDs estimate players; separate hashed game IDs identify shifts. Names, save UUIDs/links, inputs, commands, model contents and credentials are excluded. Debug previews create no events. Local and practice events can be filtered out in PostHog.
+
+Room elapsed time runs from first entry to first completion, including waits and revisits. Active time estimates visible play from 20-second heartbeats; gaps longer than 35 seconds are excluded. Cloud durations are separate. Existing saves are observed without inventing historical room timings. Counts describe instrumented play from rollout onward.
+
+Events use a SQLite outbox on the persistent save volume. Delivery runs in a background thread; network failures keep events for retry with stable event UUIDs. Delivered event payloads are retained locally for 30 days. Turning sending off keeps local logging available. Analytics storage or delivery errors never authorize, fail or block a game action.
+
+Use the queries in `deploy/posthog-dashboard.sql` to recreate the dashboard in another PostHog project. The standard event Capture API is documented at https://posthog.com/docs/api/capture .
