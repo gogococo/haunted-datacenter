@@ -36,9 +36,9 @@ class WarmSubmissionTests(unittest.TestCase):
  def test_retries_keep_the_same_job_and_changed_data_is_rejected(self):
   record=content.clean_records()[0];valid=copy.deepcopy(record);valid['messages'][1]['content']='Independent validation'
   body={'request_id':'f325691c-1bde-4485-a8cc-c03c488bdc1b','train':[record]*3,'validation':[valid]*3}
-  with tempfile.TemporaryDirectory() as tmp,patch.object(training_worker,'ROOT',Path(tmp)),patch.object(training_worker,'JOBS',{}),patch.object(training_worker,'PENDING',queue.Queue(maxsize=8)),patch.object(training_worker,'READY',True):
+  with tempfile.TemporaryDirectory() as tmp,patch.object(training_worker,'ROOT',Path(tmp)),patch.object(training_worker,'JOBS',{}),patch.object(training_worker,'TRAIN_PENDING',queue.Queue(maxsize=8)),patch.object(training_worker,'READY',True):
    first=training_worker.submit(body);second=training_worker.submit(body)
-   self.assertEqual(first['id'],second['id']);self.assertEqual(training_worker.PENDING.qsize(),1)
+   self.assertEqual(first['id'],second['id']);self.assertEqual(training_worker.TRAIN_PENDING.qsize(),1)
    other=copy.deepcopy(body);other['train'][0]['messages'][1]['content']='Changed pack'
    with self.assertRaisesRegex(ValueError,'another pack'):training_worker.submit(other)
 

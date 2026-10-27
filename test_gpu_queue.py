@@ -6,7 +6,7 @@ import training_worker as worker,training_cloud as cloud,caretaker,server
 
 class QueueTests(unittest.TestCase):
  def setUp(self):
-  self.patches=[patch.object(worker,'PENDING',queue.Queue(maxsize=8)),patch.object(worker,'SLOTS',{}),patch.object(worker,'ACTIVE_SLOT',None),patch.object(worker,'CURRENT_JOB',None),patch.object(worker,'READY',True)]
+  self.patches=[patch.object(worker,'PENDING',queue.Queue(maxsize=8)),patch.object(worker,'TRAIN_PENDING',queue.Queue(maxsize=8)),patch.object(worker,'ACTIVE_TRAINING',set()),patch.object(worker,'SLOTS',{}),patch.object(worker,'ACTIVE_SLOT',None),patch.object(worker,'CURRENT_JOB',None),patch.object(worker,'READY',True)]
   for p in self.patches:p.start()
  def tearDown(self):
   for p in reversed(self.patches):p.stop()
@@ -17,20 +17,34 @@ class QueueTests(unittest.TestCase):
    if worker.slot_info(slot)['status']=='active':return
    time.sleep(.002)
   self.fail('GPU slot did not become active')
- def test_complete_exam_holds_slot_before_training_and_next_player(self):
-  job='train-'+'a'*32;first=self.reserve(job);events=[]
-  worker.PENDING.put(('train','training-job'));second=self.reserve()
-  def consume():
-   for _ in range(3):worker.process_next()
-  with patch.object(worker,'train_job',side_effect=lambda _:events.append('training')):
-   thread=threading.Thread(target=consume,daemon=True);thread.start();self.wait_active(first['id'])
-   self.assertEqual(worker.slot_info(second['id'])['queue_ahead'],2)
-   for request in ('exam-request-1','exam-request-12','fresh-camera-check'):
-    with worker.gpu_access({'slot_id':first['id'],'job_id':job}):events.append(request)
-   self.assertNotIn('training',events)
-   worker.release_slot(first['id']);self.wait_active(second['id'])
-   self.assertEqual(events,['exam-request-1','exam-request-12','fresh-camera-check','training'])
-   worker.release_slot(second['id']);thread.join(1);self.assertFalse(thread.is_alive())
+ def test_two_exam_lanes_and_training_work_at_the_same_time(self):
+  first=self.reserve('train-'+'a'*32);second=self.reserve('train-'+'b'*32);third=self.reserve()
+  lane1=object();lane2=object();inside=threading.Event();finish=threading.Event()
+  thread1=threading.Thread(target=lambda:worker.process_next(lane1),daemon=True)
+  thread2=threading.Thread(target=lambda:worker.process_next(lane2),daemon=True)
+  thread1.start();thread2.start();self.wait_active(first['id']);self.wait_active(second['id'])
+  try:
+   def generate():
+    with worker.gpu_access({'slot_id':first['id'],'job_id':'train-'+'a'*32}) as runtime:
+     self.assertIs(runtime,lane1);inside.set();finish.wait(2)
+   request=threading.Thread(target=generate,daemon=True);request.start();self.assertTrue(inside.wait(1))
+   with worker.gpu_access({'slot_id':second['id'],'job_id':'train-'+'b'*32}) as runtime:self.assertIs(runtime,lane2)
+   self.assertEqual(worker.slot_info(third['id'])['status'],'queued')
+   self.assertEqual(worker.slot_info(third['id'])['queue_ahead'],2)
+   worker.TRAIN_PENDING.put('training-job');worker.JOBS['training-job']={'id':'training-job'}
+   trained=threading.Event()
+   class TrainingRuntime:
+    def call(self,action,job):trained.set()
+   trainer=threading.Thread(target=lambda:worker.training_next(TrainingRuntime()),daemon=True);trainer.start()
+   self.assertTrue(trained.wait(1),'An exam must not block the separate training pool')
+   self.assertFalse(finish.is_set())
+   finish.set();request.join(1)
+  finally:
+   worker.release_slot(first['id']);worker.release_slot(second['id']);thread1.join(1);thread2.join(1)
+   worker.release_slot(third['id']);worker.JOBS.pop('training-job',None)
+ def test_training_queue_position_is_independent_of_exam_queue(self):
+  self.reserve();worker.TRAIN_PENDING.put('a');worker.TRAIN_PENDING.put('b');worker.ACTIVE_TRAINING.add('active')
+  self.assertEqual(worker.training_ahead('b'),2)
  def test_retrying_reservation_is_idempotent_and_cannot_change_checkpoint(self):
   body={'request_id':str(uuid.uuid4()),'job_id':'train-'+'a'*32}
   first=worker.reserve(body);self.assertEqual(worker.reserve(body)['id'],first['id']);self.assertEqual(worker.PENDING.qsize(),1)
