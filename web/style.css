@@ -125,7 +125,7 @@
 .party-hat:after{content:'';position:absolute;top:-4px;left:15px;width:8px;height:8px;border-radius:50%;background:#f4dfaf;box-shadow:0 0 9px #ebd69f55}
 .celebration-cast figure:nth-child(2) .party-hat{animation-delay:.7s;transform:rotate(13deg)}
 .celebration-cast figure:nth-child(3) .party-hat{animation-delay:1.5s}
-.celebration-cast .celebration-caretaker .party-hat{top:8px;left:calc(50% - 24px);transform:rotate(15deg)}
+.celebration-cast .celebration-caretaker .party-hat{top:-26px;left:calc(50% - 19px);transform:rotate(15deg)}
 .escape-score{display:grid;grid-template-columns:1fr 1fr;gap:16px 30px;max-width:480px;margin:24px auto;padding:21px 28px;background:#ede8d2;color:#243e35;border-radius:6px;box-shadow:7px 8px 0 #0c20254d;text-align:left;border-top:4px solid #e6aa75}
 .escape-score>div:nth-child(2){border-left:1px dashed #879d80;padding-left:28px}
 .escape-score span{display:block;font:9px var(--mono);letter-spacing:1.3px;color:#50634e}
@@ -175,7 +175,7 @@
  .celebration-cast{gap:7px;margin-top:30px}.crew-art{height:91px}
  .celebration-cast .crew-art svg{width:65px;height:80px}.celebration-cast .celebration-caretaker .crew-art svg{width:85px;height:80px}
  .party-hat{width:25px;height:28px;left:calc(50% - 12px);top:-2px}.party-hat:after{left:9px;width:7px;height:7px}
- .celebration-cast .celebration-caretaker .party-hat{top:7px;left:calc(50% - 15px)}
+ .celebration-cast .celebration-caretaker .party-hat{top:-14px;left:calc(50% - 12.5px)}
  .celebration-cast figcaption{font-size:9px}.celebration-cast small{font-size:9px;min-height:45px}
  .escape-score{padding:19px;gap:15px}.escape-score>div:nth-child(2){padding-left:20px}.escape-score span{font-size:8px}.escape-score strong{font-size:30px}
  .ending .debrief{grid-template-columns:1fr;gap:21px}.ending .debrief>div{padding-left:14px;border-left:2px solid #b7cf9860}
