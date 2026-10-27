@@ -19,6 +19,94 @@ PENDING = queue.Queue(maxsize=8)
 READY = False
 LOADED = set()
 CURRENT_JOB = None
+SLOTS = {}
+SLOTS_LOCK = threading.RLock()
+ACTIVE_SLOT = None
+SLOT_TTL = 90
+ADMISSION_LOCK = threading.RLock()
+
+def ahead(item):
+    with PENDING.mutex:
+        pending = list(PENDING.queue)
+    try: return pending.index(item) + int(CURRENT_JOB is not None or ACTIVE_SLOT is not None)
+    except ValueError: return 0
+
+def slot_info(identifier, renew=False):
+    with SLOTS_LOCK:
+        slot = SLOTS.get(identifier)
+        if not slot: raise ValueError('GPU queue task was not found. Retry this operation.')
+        if renew: slot['touched'] = time.monotonic()
+        result = {k: slot[k] for k in ('id', 'status', 'job_id', 'label')}
+    result['queue_ahead'] = ahead(('slot', identifier)) if result['status'] == 'queued' else 0
+    return result
+
+def reserve(body):
+    if not READY: raise ValueError('The GPU worker is still warming its base model.')
+    identifier = 'slot-' + str(uuid.UUID(body['request_id'])).replace('-', '')
+    job = body.get('job_id')
+    if job is not None: folder(job)
+    with ADMISSION_LOCK, SLOTS_LOCK:
+        previous = SLOTS.get(identifier)
+        if previous:
+            if previous['job_id'] != job: raise ValueError('This GPU task belongs to another checkpoint.')
+            return slot_info(identifier, renew=True)
+        if PENDING.full(): raise ValueError('The GPU queue is full. No task submitted; try again shortly.')
+        SLOTS[identifier] = {'id': identifier, 'job_id': job, 'label': str(body.get('label', 'Caretaker request'))[:80],
+                             'status': 'queued', 'touched': time.monotonic(), 'released': threading.Event()}
+        try: PENDING.put_nowait(('slot', identifier))
+        except queue.Full:
+            del SLOTS[identifier]
+            raise ValueError('The GPU queue is full. No task submitted; try again shortly.') from None
+        return slot_info(identifier)
+
+def release_slot(identifier):
+    with SLOTS_LOCK:
+        slot = SLOTS.get(identifier)
+        if not slot: return
+        if slot['status'] == 'queued': slot['status'] = 'cancelled'
+        slot['released'].set()
+
+def serve_slot(identifier):
+    global ACTIVE_SLOT
+    with SLOTS_LOCK:
+        slot = SLOTS[identifier]
+        if slot['status'] == 'cancelled' or time.monotonic() - slot['touched'] > SLOT_TTL:
+            slot['status'] = 'expired' if slot['status'] != 'cancelled' else 'cancelled'
+            return
+        slot['status'] = 'active'; ACTIVE_SLOT = identifier
+    while not slot['released'].wait(.25):
+        with SLOTS_LOCK:
+            if time.monotonic() - slot['touched'] > SLOT_TTL: break
+    # Finish any in-flight generation before letting the next training job run.
+    with LOCK, SLOTS_LOCK:
+        slot['status'] = 'released' if slot['released'].is_set() else 'expired'
+        ACTIVE_SLOT = None
+
+@contextlib.contextmanager
+def gpu_access(body):
+    identifier = body.get('slot_id'); temporary = identifier is None
+    if temporary:
+        identifier = reserve({'request_id': str(uuid.uuid4()), 'job_id': body.get('job_id')})['id']
+    try:
+        if temporary:
+            while slot_info(identifier, renew=True)['status'] == 'queued': time.sleep(.25)
+        with LOCK:
+            with SLOTS_LOCK:
+                slot = SLOTS.get(identifier)
+                if not slot or ACTIVE_SLOT != identifier or slot['status'] != 'active':
+                    raise ValueError('This GPU queue task is no longer active. Retry this operation.')
+                if slot['job_id'] != body.get('job_id'): raise ValueError('GPU queue task does not match this checkpoint.')
+                slot['touched'] = time.monotonic()
+            yield
+    finally:
+        if temporary: release_slot(identifier)
+
+def process_next():
+    kind, identifier = PENDING.get()
+    try:
+        if kind == 'train': train_job(identifier)
+        else: serve_slot(identifier)
+    finally: PENDING.task_done()
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
@@ -56,7 +144,7 @@ def submit(body):
     prompts = lambda rows: {r['messages'][1]['content'] for r in rows}
     if prompts(train) & prompts(valid): raise ValueError('Training and validation prompts must be separate.')
     data_hash = digest({'train': train, 'validation': valid})
-    with JOBS_LOCK:
+    with ADMISSION_LOCK, JOBS_LOCK:
         if identifier in JOBS:
             if JOBS[identifier]['data_hash'] != data_hash: raise ValueError('This request ID already belongs to another pack.')
             return JOBS[identifier]
@@ -69,7 +157,7 @@ def submit(body):
                'progress': 0, 'queue_ahead': PENDING.qsize() + int(CURRENT_JOB is not None)}
         path = folder(identifier); path.mkdir(parents=True, exist_ok=True)
         (path / 'data.json').write_text(json.dumps({'train': train, 'validation': valid}))
-        store(job); PENDING.put(identifier)
+        store(job); PENDING.put_nowait(('train', identifier))
         return job.copy()
 
 def prefix(messages):
@@ -151,9 +239,7 @@ def generation(body):
     temperature = float(body.get('temperature', 0)); maximum = int(body.get('max_tokens', 128))
     if not math.isfinite(temperature) or not 0 <= temperature <= 2 or not 16 <= maximum <= 512: raise ValueError('Invalid generation settings.')
     identifier = body.get('job_id')
-    # Inference waits only briefly instead of hiding a training queue in a request timeout.
-    if not LOCK.acquire(timeout=2): raise ValueError('The GPU is training another caretaker. Retry inference when it finishes.')
-    try:
+    with gpu_access(body):
         job = load_adapter(identifier) if identifier else None
         if job: model.set_adapter(identifier)
         model.eval(); tokenizer.padding_side = 'left'
@@ -169,7 +255,6 @@ def generation(body):
         return {'id': 'inference-'+uuid.uuid4().hex, 'model': MODEL, 'job_id': identifier,
                 'artifact_hash': job['artifact_hash'] if job else 'base:'+MODEL,
                 'choices': [{'message': {'content': text}, 'finish_reason': 'stop' if stopped else 'length'}]}
-    finally: LOCK.release()
 
 class Handler(BaseHTTPRequestHandler):
     def send(self, data, status=200):
@@ -178,9 +263,14 @@ class Handler(BaseHTTPRequestHandler):
         return bool(TOKEN and hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer '+TOKEN))
     def do_GET(self):
         if not self.authorized(): self.send({'error':'Unauthorized'},401); return
-        if self.path == '/healthz': self.send({'ready': READY, 'model': MODEL, 'base_revision': REVISION, 'queued': PENDING.qsize(), 'provider': 'Nebius Serverless AI'}); return
+        if self.path == '/healthz': self.send({'ready': READY, 'model': MODEL, 'base_revision': REVISION, 'queue_version': 1, 'queued': PENDING.qsize(), 'provider': 'Nebius Serverless AI'}); return
+        if self.path.startswith('/slots/'):
+            try: self.send(slot_info(self.path.removeprefix('/slots/'), renew=True))
+            except ValueError as error: self.send({'error': str(error)},404)
+            return
         if self.path.startswith('/jobs/'):
             job = JOBS.get(self.path.removeprefix('/jobs/'))
+            if job and job['status'] == 'queued': job = {**job, 'queue_ahead': ahead(('train', job['id']))}
             self.send(job if job else {'error':'Job not found'}, 200 if job else 404); return
         self.send({'error':'Not found'},404)
     def do_POST(self):
@@ -190,9 +280,12 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= 2_000_000: raise ValueError('Send a small training pack or inference request.')
             body = json.loads(self.rfile.read(length))
             if self.path == '/jobs': self.send(submit(body),202)
+            elif self.path == '/slots': self.send(reserve(body),202)
+            elif self.path == '/slots/release':
+                release_slot(body['slot_id']); self.send({'released':True})
             elif self.path == '/v1/chat/completions': self.send(generation(body))
             elif self.path == '/load':
-                with LOCK: job = load_adapter(body['job_id'])
+                with gpu_access(body): job = load_adapter(body['job_id'])
                 self.send({**{k:job[k] for k in ('id','model','artifact_hash','checkpoint_id','train_sha256','validation_sha256')}, 'ready':True})
             else: self.send({'error':'Not found'},404)
         except (ValueError, KeyError, TypeError) as error: self.send({'error':str(error)},400)
@@ -224,8 +317,6 @@ def main():
     for p in model.parameters(): p.requires_grad_(False)
     READY = True
     print(json.dumps({'event':'warm-worker-ready','model':MODEL,'device':torch.cuda.get_device_name()}),flush=True)
-    while True:
-        identifier = PENDING.get()
-        train_job(identifier); PENDING.task_done()
+    while True: process_next()
 
 if __name__ == '__main__': main()

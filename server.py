@@ -214,9 +214,13 @@ def launch_exit():
     flags=exit_status(G.state);safe=all(flags.values());snapshot=copy.deepcopy(n);session=G.state['run_id']
     proof=(p.get('revision'),caretaker.serving_id(n),copy.deepcopy(n['config']))
     n['operation']={'action':'release-exit','status':'running','message':'The caretaker is inspecting the building and using his own door connection…'};n['revision']+=1
+    def progress(message):
+        with G.lock:
+            if G.state['run_id']==session:
+                G.state['noc']['operation']['message']=message;G.state['noc']['revision']+=1;save()
     def worker():
         try:
-            message=caretaker.run('exit-decision',snapshot,{'status':flags},G.state['sources']['dataset'],G.runtime,lambda _:None)
+            message=caretaker.run('exit-decision',snapshot,{'status':flags},G.state['sources']['dataset'],G.runtime,progress)
             reply=snapshot['exit_decision'];approved=bool(safe and reply['checks']['correct'] and reply['checks']['complete'])
             status='succeeded'
             if approved:
@@ -281,7 +285,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as error:self.json({'error':str(error)},404)
     def get(self):
         path=urlparse(self.path).path
-        if path=='/healthz': self.json({'ok':True,'version':'caretaker-rescue-v5'});return
+        if path=='/healthz': self.json({'ok':True,'version':'caretaker-queue-v6'});return
         if path=='/api/leaderboard': self.json({'entries':[{k:v for k,v in row.items() if k!='run_id'} for row in hosting.leaderboard(G.root)]});return
         if path=='/api/state':
             if not self.has_game:self.json({'authenticated':True,'hosted':hosting.hosted(),'has_session':False,'is_host':False});return
@@ -356,6 +360,9 @@ class Handler(BaseHTTPRequestHandler):
             if not G.state['started']:
                 G.state['started']=time.time();G.state['paused']=False;G.state['pause_at']=None;G.state['pause_total']=0;event('You accepted the pager. Forty-five minutes until midnight.')
                 warm_existing_controller(G.root,G.state['run_id'])
+        elif path=='/api/resume':
+            if not hosting.clock(G.state)['resumable']:raise ValueError('This shift cannot be resumed. Start a new game.')
+            warm_existing_controller(G.root,G.state['run_id'])
         elif path=='/api/host':
             act=b['action']
             if act in ('caretaker-backup','caretaker-prompt'):

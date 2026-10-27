@@ -1,8 +1,45 @@
 """Server-side client for a warm Serverless trainer. No credentials in saves."""
-import hashlib,json,os,urllib.request,urllib.error,urllib.parse,uuid
+import contextlib,contextvars,hashlib,json,os,threading,time,urllib.request,urllib.error,urllib.parse,uuid
 from tokenfactory import NoRedirect
 
 def configured(): return bool(os.environ.get('CARETAKER_WORKER_URL') and os.environ.get('CARETAKER_WORKER_TOKEN'))
+
+SLOT = contextvars.ContextVar('caretaker_gpu_slot', default=None)
+
+def queued_body(body):
+    return {**body, 'slot_id': SLOT.get()} if SLOT.get() else body
+
+@contextlib.contextmanager
+def gpu_slot(action,n,progress):
+    if not configured() or SLOT.get():
+        yield
+        return
+    active=n.get('route')=='finetuned' and (n.get('runner') or {}).get('active')
+    job=(n.get('submission') or {}).get('id') if active or action=='load-own' else None
+    request=str(uuid.uuid4());identifier='slot-'+request.replace('-','');stop=threading.Event();renew=None;context=None
+    try:
+        task=api('/slots',{'request_id':request,'job_id':job,'label':action})
+        deadline=time.monotonic()+600
+        while True:
+            if task.get('id')!=identifier or task.get('job_id')!=job:raise ValueError('GPU queue receipt did not match this operation and checkpoint.')
+            if task['status']!='queued':break
+            count=task['queue_ahead'];progress('Waiting for GPU · '+str(count)+' task'+('' if count==1 else 's')+' ahead. This will continue automatically.')
+            if time.monotonic()>=deadline:raise ValueError('The GPU queue wait exceeded ten minutes. Your progress is saved; retry this operation.')
+            time.sleep(2);task=api('/slots/'+identifier)
+        if task['status']!='active':raise ValueError('This GPU queue task ended before it could start. Retry this operation.')
+        progress('GPU ready. Continuing '+action.replace('-',' ')+'…')
+        def heartbeat():
+            while not stop.wait(15):
+                try:api('/slots/'+identifier)
+                except ValueError:pass  # The next model request still checks active ownership.
+        renew=threading.Thread(target=heartbeat,daemon=True);renew.start()
+        context=SLOT.set(identifier)
+        yield
+    finally:
+        if context is not None:SLOT.reset(context)
+        stop.set()
+        try:api('/slots/release',{'slot_id':identifier})
+        except ValueError:pass  # Abandoned slots expire on the worker.
 
 def api(path, body=None):
     base=os.environ.get('CARETAKER_WORKER_URL','').rstrip('/'); parsed=urllib.parse.urlparse(base)
@@ -35,7 +72,7 @@ def refresh(n):
 def load(n):
     job=refresh(n)
     if job['status']!='succeeded':raise ValueError('Wait for your training job to finish before loading its checkpoint.')
-    receipt=api('/load',{'job_id':job['id']})
+    receipt=api('/load',queued_body({'job_id':job['id']}))
     if receipt.get('id')!=job['id'] or receipt.get('artifact_hash')!=job.get('artifact_hash'):raise ValueError('The serving worker did not verify this job’s checkpoint.')
     n['job']=job.copy();n['runner']={**receipt,'active':True,'provider':'serverless','job_id':job['id']};n['route']='finetuned';n['report']=None;n.pop('final',None)
     n['config']['base_model']=job['model']
@@ -44,7 +81,7 @@ def load(n):
 def completion(n,prompt,baseline=False):
     active=not baseline and n.get('route')=='finetuned' and (n.get('runner') or {}).get('active')
     job=n.get('submission') or {};cfg=n['config']
-    result=api('/v1/chat/completions',{'messages':[{'role':'system','content':cfg['system']},{'role':'user','content':prompt}], 'temperature':cfg['temperature'],'max_tokens':cfg['max_tokens'],'job_id':job.get('id') if active else None})
+    result=api('/v1/chat/completions',queued_body({'messages':[{'role':'system','content':cfg['system']},{'role':'user','content':prompt}], 'temperature':cfg['temperature'],'max_tokens':cfg['max_tokens'],'job_id':job.get('id') if active else None}))
     if active and (result.get('job_id')!=job['id'] or result.get('artifact_hash')!=n['runner']['artifact_hash']):raise ValueError('The response did not use your verified checkpoint.')
     choice=result['choices'][0]
     return {'output':choice['message']['content'],'finish_reason':choice['finish_reason'],'model':result['model']+(' · your Serverless adapter' if active else ' · base weights'),'request_id':result['id']}

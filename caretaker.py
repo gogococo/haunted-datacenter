@@ -357,7 +357,10 @@ def _run(action,n,body,source,runtime,progress):
 # with inference so one player's model cannot leak into another player's test.
 RUNNER_LOCK=threading.RLock()
 def run(action,n,body,source,runtime,progress):
- if n.get('training_provider')=='serverless' or (n.get('submission') or {}).get('provider')=='serverless':return _run(action,n,body,source,runtime,progress)
+ if n.get('training_provider')=='serverless' or (n.get('submission') or {}).get('provider')=='serverless':
+  if action in ('test','verify','final','load-own','probe','review-probe','exit-decision'):
+   with training_cloud.gpu_slot(action,n,progress):return _run(action,n,body,source,runtime,progress)
+  return _run(action,n,body,source,runtime,progress)
  if action not in ('connect','inspect','review-probe','probe','test','verify','load-own','backup','final','exit-decision'):
   return _run(action,n,body,source,runtime,progress)
  progress('Waiting for the shared caretaker CPU…')
