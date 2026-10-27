@@ -59,7 +59,7 @@ Cloudflare's `haunted-datacenter-edge` Worker connects only `halloween.curiousja
 
 Endpoint-secret references pin a SecretStash version. To change credentials, create a new version and replace the endpoint with the same persistent filesystem. Do not delete that filesystem. Finishing or starting over releases only that UUID’s cooling-controller lease. The controller stops after the last active lease is released. Abandoned browser leases expire after 20 minutes and a minute-interval sweep stops an unused controller. An open game that has claimed the controller keeps its lease alive; returning after expiry can wake the same endpoint. A new shift wakes an existing, verified shared controller in the background while Rooms 1–2 are played; this never creates an extra app or fills the player’s commissioning fields. Room 3 still requires the maintenance-book settings and actual readiness/cooling checks. Public games share its equipment-plate configuration and cannot replace another player’s controller. Training jobs continue independently.
 
-The app uses 4 vCPUs; one shared cooling controller uses 2 vCPUs while running. No additional CPU model server or cooling endpoint is created per player. The private pool receipt is `GAME_DATA_DIR/serverless/controller.json`; only verified game-owned resources are reused or stopped. Keep one active application deployment per Nebius project. If a stop fails, the cooling panel shows the cleanup error. The warm worker serializes training and inference and selects the requested job adapter explicitly. A busy GPU can queue jobs without mixing checkpoints.
+The app uses 4 vCPUs; one shared cooling controller uses 2 vCPUs while running. No additional CPU model server or cooling endpoint is created per player. The private pool receipt is `GAME_DATA_DIR/serverless/controller.json`; only verified game-owned resources are reused or stopped. Keep one active application deployment per Nebius project. If a stop fails, the cooling panel shows the cleanup error. The warm worker uses one FIFO queue for training, checkpoint loading and complete exams. Waiting operations show their queue position and continue automatically; every request still selects its own job adapter. Starting or resuming a game warms only the existing shared cooling controller.
 
 ## Verification
 
@@ -74,10 +74,10 @@ Automated tests use temporary data and mocked cloud operations. Real browser and
 
 - Public URL: **https://halloween.curiousjaxx.dev/**
 - Project: `jc-kubecon-demo` (`project-e00nm584pr00c9xab0myzw`), `eu-north1`
-- Host endpoint: `aiendpoint-e00r1xmcwvx7net6zy`
+- Host endpoint: `aiendpoint-e00sb8kv0b5ee45hcw`
 - Persistent filesystem: `computefilesystem-e00ybmwmaz7tm6290n`
-- Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:rescue-v5`
-- Checked image manifest: `sha256:157f2c136ba99b7a4024af0676638aa7ebe6f3130f56bfc3f4b21e53a9b30ccd`
+- Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:queue-v6`
+- Checked image manifest: `sha256:b57c604ec12940ef9f0d5a5ee63e5f4642e0397deda3fa76f0e6cede95c5a000`
 
 The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it unlocks presentation shortcuts and model experiments. Normal games use the configured backend integrations without this code.
 
