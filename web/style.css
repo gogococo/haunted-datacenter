@@ -57,7 +57,7 @@
 @keyframes ghost-celebrate{50%{transform:translateY(-9px) rotate(3deg)}}@keyframes lesson-success{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}@keyframes room-brownout{0%,22%,25%,41%,44%,100%{opacity:0}23%,42%{opacity:.38}24%,43%{opacity:.16}}@keyframes room-light{0%,22%,25%,41%,44%,100%{opacity:1}23%,42%{opacity:.12}24%,43%{opacity:.45}}@keyframes coolant-drip{to{transform:translateY(18px);opacity:0}}
 @media(max-width:650px){.announcement-deliveries{grid-template-columns:1fr}.deployment-config{grid-template-columns:1fr}.rehearsal-controls{gap:5px}.rehearsal-control{font-size:10px;padding:8px}.plant-stage{max-height:none}.plant-room-caption{font-size:8px}.plant-object span{font-size:7px}.celebration-cast{gap:8px}.celebration-cast svg{width:50px;height:65px}.celebration-cast small{font-size:8px}.ending{padding:22px}.help-tip>[role=tooltip]{left:-60px}.temperature-trace b{font-size:17px}}
 @media(prefers-reduced-motion:reduce){.plant-brownout,.plant-light-spill,.plant-light,.coolant-drip,.celebration-cast svg,.demo-effect.working{animation:none!important}}
-.object-speaker{left:80.5%;top:18%;width:12%;height:16%}.object-speaker .object-label{bottom:-12px}
+.switchboard-room .object-speaker{left:82%;top:28%;width:12%;height:13%}.object-speaker .object-label{bottom:-12px}
 .rehearsal-machine{margin:18px 0}.rehearsal-machine svg{display:block;width:100%;max-height:145px}
 .plant-stage{width:min(100%,calc(58vh * 1.6923));max-height:none;margin-inline:auto}.plant-progress{justify-content:center}
 .in-room .plant-progress .pass{color:#c3dba7}.in-room .plant-room>.button-row>.secondary{color:#e5e4ce;border-color:#829886;background:#253b3c}.plant-room .plant-room-caption{color:#e1e4cc}
