@@ -2,7 +2,7 @@
 export const APP_ORIGIN='https://halloween.curiousjaxx.dev';
 export const UPSTREAM_ORIGIN='https://port8080-qqvab8dsp0rj41y.tunnel.applications.eu-north1.nebius.cloud';
 
-export function createProxy({appOrigin=APP_ORIGIN,upstreamOrigin=UPSTREAM_ORIGIN,fetcher=fetch}={}){
+export function createProxy({appOrigin=APP_ORIGIN,upstreamOrigin=UPSTREAM_ORIGIN,fetcher=fetch,assets={}}={}){
  const app=new URL(appOrigin),upstream=new URL(upstreamOrigin);
  return async request=>{
   const incoming=new URL(request.url);
@@ -12,6 +12,8 @@ export function createProxy({appOrigin=APP_ORIGIN,upstreamOrigin=UPSTREAM_ORIGIN
   // Translate only the exact app origin for the backend's existing same-origin
   // check. Foreign browser origins are rejected before any inference can start.
   if(origin&&origin!==app.origin)return new Response('Origin rejected.',{status:403});
+  const asset=assets[incoming.pathname];
+  if(asset&&['GET','HEAD'].includes(request.method))return new Response(request.method==='HEAD'?null:asset.body,{headers:{'Content-Type':asset.type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
   const target=new URL(upstream.origin);target.pathname=incoming.pathname;target.search=incoming.search;
   const headers=new Headers(request.headers);headers.set('Host',upstream.host);
   headers.delete('Forwarded');headers.delete('X-Forwarded-Host');

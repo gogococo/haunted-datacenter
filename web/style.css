@@ -92,3 +92,99 @@
 /* Caretaker cartridges, evidence cards and the physical cooling console. */
 .personality-cartridges{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:24px 0}.cartridge{display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px 12px;background:#273e45;color:#f1e7cf;border:3px solid #8b9f8e;border-radius:8px;box-shadow:inset 0 -10px #172c32}.cartridge>span{font:30px var(--mono);color:#c3d7ad}.cartridge small{line-height:1.5;min-height:40px}.cartridge.selected{border-color:#df9e6b;background:#3c5b55}.caretaker-voice{display:flex;gap:18px;align-items:center;padding:16px 20px;background:#263f46;color:#f2e7cd;border:1px solid #8caaa0;border-radius:8px;margin:18px 0}.caretaker-voice>div:first-child{width:48px;flex-shrink:0}.caretaker-voice svg{width:48px;height:65px}.caretaker-voice p{margin:6px 0 10px;line-height:1.6}.caretaker-voice small{font:11px/1.7 var(--mono);color:#c6d6bd}.caretaker-voice summary{font-size:11px;color:#c6d6bd;cursor:pointer}.lesson-progress{display:flex;gap:8px;margin-bottom:18px}.lesson-progress button{flex:1;padding:12px 8px;border:1px solid #a6b19a;background:#ece7d8;color:#263c3a}.lesson-progress .active{background:#263f46;color:#f4e9cf;border-color:#d69968}.lesson-camera{position:relative;max-width:560px;margin:auto}.lesson-camera img{width:100%;border:6px solid #38555b;display:block}.lesson-camera>span{position:absolute;bottom:7px;left:7px;padding:6px 10px;background:#152d32e8;color:#eddfbd;font:10px var(--mono)}.lesson-story{margin-top:22px}.lesson-story>small,.alex-example>small,.training-pair small{font:11px var(--mono);letter-spacing:.06em}.camera-observation{background:#e1e7d3;border-left:4px solid #8eaa85;padding:16px;margin:16px 0}.camera-observation p{margin:8px 0}.camera-observation pre{white-space:pre-wrap;font-size:11px}.alex-example{padding:18px;background:#e8d8bf;border:1px dashed #ad9178;margin:18px 0}.alex-example pre,.training-pair pre,.exit-decision pre{padding:14px;background:#263c43;color:#f2e6c9;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 var(--mono)}.rehearsal-outcome{position:relative;padding:20px 100px 20px 20px;min-height:100px;background:#f1dbc8;border:1px solid #c98f6e;border-radius:6px;margin:18px 0}.rehearsal-outcome.working{background:#dce8ce;border-color:#8ba27d}.rehearsal-outcome p{line-height:1.6}.rehearsal-fan,.rehearsal-latch{position:absolute;right:25px;top:26px;font-size:54px;color:#385f5c}.rehearsal-fan.spinning{animation:fan-spin 2s linear infinite}.rehearsal-puddle{position:absolute;right:15px;bottom:20px;width:65px;height:25px;border-radius:50%;background:#5b9da7;animation:puddle-grow 2.5s ease-in-out infinite alternate}.rehearsal-puddle.stopped{animation:none;width:40px}.repair-choices{display:flex;gap:12px;margin:18px 0}.repair-button{flex:1;padding:18px 14px;background:#2b474d;color:#f4e7c8;border:2px solid #91a994;border-radius:4px}.training-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}.training-pair>div{background:#e3e8d6;border:1px solid #a2af95;padding:16px}.training-pair p{font-size:14px;line-height:1.6}.lesson-saved,.model-loaded{padding:22px;background:#e0e8d1;border:1px solid #8da37c;margin:20px 0}.training-receipt progress{width:100%;height:22px;accent-color:#587e62}.reply-comparison{padding:16px;border:1px solid #b3b69e;margin:14px 0}.reply-comparison>div,.cloud-exchange>div{display:grid;grid-template-columns:1fr 1fr;gap:14px}.reply-comparison pre,.cloud-exchange pre{font:11px/1.65 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:#273d44;color:#f1e6cc}.reply-comparison>p:last-child{font-size:13px;color:#9c432c}.inspection-error{background:#f6d7c8;color:#822e21;border:2px solid #be6f52;padding:16px;position:sticky;top:0;z-index:3}.cooling-panel{background:#18373d;color:#efdfbd;border:5px solid #819d91;border-radius:10px;padding:24px;margin:24px 0;box-shadow:inset 0 0 30px #071d2670}.control-panel-title{display:flex;justify-content:space-between;gap:15px;align-items:center;border-bottom:1px solid #6a8b7d;padding-bottom:16px;font:11px/1.7 var(--mono)}.control-panel-title b{color:#c6d8ad;max-width:50%}.cooling-instruments{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0}.instrument{padding:18px 12px;background:#102c32;border:1px solid #77958b;text-align:center;border-radius:7px}.instrument small{display:block;font:10px/1.7 var(--mono)}.instrument strong{display:block;font:38px/1.8 var(--mono);color:#e4a181}.instrument strong span{font-size:14px}.instrument.safe strong{color:#b6d5a1}.instrument meter{width:100%;height:14px;margin-bottom:8px}.fan-levers{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.fan-lever{border:2px solid #819e91;background:#24464c;color:#f2e4c4;padding:16px 10px;border-radius:6px;display:flex;align-items:center;flex-direction:column;gap:10px}.fan-lever.selected{border-color:#edb078;background:#405e56}.fan-lever small{font:10px/1.5 var(--mono)}.lever-track{position:relative;display:block;width:12px;height:44px;background:#10272d;border:1px solid #82958d;border-radius:8px}.lever-track i{display:block;width:30px;height:14px;position:absolute;top:26px;left:-10px;background:#a8bca6;border:2px solid #d4d4ad;border-radius:3px}.selected .lever-track i{top:5px;background:#d8996c}.pump-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:24px 0;font-size:13px}.pump-controls button{padding:10px 16px;border:1px solid #8ba492;background:#24464c;color:#f1e1bf}.pump-controls .selected{background:#9fbd9c;color:#143c34}.pump-controls span{color:#b7d49d;margin-left:auto;font:10px var(--mono)}.cooling-panel h3{color:#efdfbd;font-size:21px}.cooling-panel .untested-controls{font-size:13px;color:#d8c6a8}.cooling-panel .cloud-exchange{margin-top:24px;color:#efdfbd}.cooling-panel .plant-test-report{padding:16px;margin-top:20px;background:#284b43;color:#dbe9c6}.cooling-panel .plant-test-report.fail{background:#5b4039;color:#ffe4cb}.health-vs-cooling{border-left:4px solid #b4784e;padding:12px 16px;background:#e8ddc6}.exit-checklist{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0;padding:20px;border:1px solid #acb89e;background:#e1e8d5;font-size:13px}.exit-decision{margin-top:20px}.exit-decision p{line-height:1.6}.noc-camera-inspection{max-width:850px!important}.noc-stage{max-height:58vh}.noc-stage+.caretaker-voice{margin-top:24px}@keyframes puddle-grow{to{transform:scaleX(1.3)}}@keyframes fan-spin{to{transform:rotate(360deg)}}@media(max-width:650px){.personality-cartridges{grid-template-columns:1fr}.cartridge{padding:16px}.training-pair,.reply-comparison>div,.cloud-exchange>div{grid-template-columns:1fr}.cooling-instruments{gap:5px}.instrument{padding:12px 5px}.instrument strong{font-size:25px}.cooling-panel{padding:14px}.control-panel-title{display:block}.control-panel-title b{display:block;max-width:100%;margin-top:10px}.exit-checklist{grid-template-columns:1fr}.fan-levers{gap:6px}.fan-lever{padding:12px 5px}}@media(prefers-reduced-motion:reduce){.rehearsal-fan,.rehearsal-puddle{animation:none!important}}
 .noc-settings{gap:20px}.noc-settings label{min-height:0!important}.noc-settings input[type=number]{height:auto!important;padding:12px}.noc-settings details{grid-column:1/-1}.noc-settings details textarea{display:block;min-height:100px;margin-top:12px}
+
+/* Clocking out should feel like winning. The whole night shift gets a party hat. */
+.victory,.game-over{background:#112a29;color:#f5eed9}
+.victory .app,.game-over .app{margin-left:0}
+.victory main,.game-over main{max-width:none;padding:0}
+.victory header,.game-over header,.victory footer,.game-over footer{border-color:#405a50;color:#bbcfb4;background:#142d2c}
+.victory .header-path,.game-over .header-path{color:#a0b49d}
+.victory .mode-badge,.game-over .mode-badge{color:#c8dab9;border-color:#657f6d;background:transparent}
+.ending{position:relative;isolation:isolate;overflow:hidden;border-radius:0;padding:65px 30px 40px;background:radial-gradient(ellipse at 50% 20%,#3c604b 0,#213f35 45%,#122d2c 100%);min-height:calc(100svh - 123px);text-align:center}
+.ending-content{position:relative;z-index:1;max-width:1080px;margin:auto}
+.ending h1,.ending h3{color:#f7edd6!important}
+.ending h1{font:clamp(52px,6.3vw,88px)/.99 var(--serif);letter-spacing:-2px;font-weight:400;margin:25px 0 23px;animation:victory-arrive .7s ease-out both}
+.ending h1 em{color:#edac79;font-style:normal}
+.ending p,.ending .eyebrow{color:#c6d7bb!important}
+.escape-stamp{display:inline-flex;align-items:center;gap:9px;font:10px/1.6 var(--mono);letter-spacing:1.8px;color:#d2e3b9;border:1px solid #77977388;background:#152f2c8c;border-radius:30px;padding:8px 16px}
+.escape-stamp>span{width:7px;height:7px;background:#c6dca1;border-radius:50%;box-shadow:0 0 13px #c6dca1}
+.ending .eyebrow{font-size:9px;letter-spacing:2px}
+.ending .victory-copy{font-size:15px;line-height:1.8;margin:0 0 24px}
+.party-bunting{position:absolute;inset:0 0 auto;height:55px;display:flex;justify-content:space-evenly;border-top:2px solid #c1cba180;transform:rotate(-2deg) scale(1.03);transform-origin:left top;pointer-events:none}
+.party-bunting i{display:block;width:31px;height:42px;background:#d99b6a;clip-path:polygon(0 0,100% 0,50% 100%)}
+.party-bunting i:nth-child(3n){background:#b4d49e}.party-bunting i:nth-child(3n+2){background:#b9a6d1}
+.celebration-cast{gap:clamp(15px,4vw,60px);align-items:flex-start;margin:35px auto 24px}
+.celebration-cast figure{max-width:165px;flex:1;min-width:0}
+.crew-art{height:140px;position:relative;display:flex;align-items:flex-end;justify-content:center}
+.celebration-cast .crew-art svg{width:110px;height:125px;filter:drop-shadow(0 13px 12px #091e2260);animation:ghost-celebrate 3.4s ease-in-out infinite}
+.celebration-cast .celebration-caretaker .crew-art svg{width:150px;height:125px}
+.celebration-cast figcaption{font:12px var(--mono);color:#f6edd6;margin-top:13px}
+.celebration-cast small{font:11px/1.6 var(--sans);color:#cedbbf;margin-top:8px;min-height:35px}
+.party-hat{position:absolute;z-index:2;top:0;left:calc(50% - 19px);height:40px;width:38px;transform:rotate(-12deg);animation:party-hat-bob 3.4s ease-in-out infinite;pointer-events:none}
+.party-hat:before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(25deg,#edb172 0 8px,#9a725f 9px 13px);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.party-hat:after{content:'';position:absolute;top:-4px;left:15px;width:8px;height:8px;border-radius:50%;background:#f4dfaf;box-shadow:0 0 9px #ebd69f55}
+.celebration-cast figure:nth-child(2) .party-hat{animation-delay:.7s;transform:rotate(13deg)}
+.celebration-cast figure:nth-child(3) .party-hat{animation-delay:1.5s}
+.celebration-cast .celebration-caretaker .party-hat{top:8px;left:calc(50% - 24px);transform:rotate(15deg)}
+.escape-score{display:grid;grid-template-columns:1fr 1fr;gap:16px 30px;max-width:480px;margin:24px auto;padding:21px 28px;background:#ede8d2;color:#243e35;border-radius:6px;box-shadow:7px 8px 0 #0c20254d;text-align:left;border-top:4px solid #e6aa75}
+.escape-score>div:nth-child(2){border-left:1px dashed #879d80;padding-left:28px}
+.escape-score span{display:block;font:9px var(--mono);letter-spacing:1.3px;color:#50634e}
+.escape-score b{display:block;font:25px/1.5 var(--serif);overflow-wrap:anywhere;margin-top:6px}
+.escape-score strong{display:block;font:35px/1.2 var(--mono);letter-spacing:-1px;margin-top:6px}
+.ending .escape-score p{grid-column:1/-1;text-align:center;font:11px/1.5 var(--sans);margin:0;color:#3c5942!important}
+.ending-actions{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:16px;margin:29px auto 34px}
+.ending .ending-actions .primary{background:#f09c65;color:#172e29;border-color:#f09c65;font-size:15px;padding:17px 26px;box-shadow:0 5px 0 #0c222780;transition:transform .15s,background .15s}
+.ending-actions .primary:hover{transform:translateY(-2px);background:#ffb17c}
+.ending-actions .text-button{color:#c6d5b8;font-size:12px;padding:12px}
+.ending .debrief{display:grid;grid-template-columns:repeat(3,1fr);gap:25px;text-align:left;max-width:940px;margin:37px auto 0;padding-top:27px;border-top:1px solid #8ca58650}
+.ending .debrief h3{font:25px/1.2 var(--serif);margin:10px 0 12px}
+.ending .debrief p{font-size:12px;line-height:1.8;margin:0}
+.achievement-mark{font:10px var(--mono);letter-spacing:1.2px;color:#c6dca1}
+.party-confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2}
+.party-confetti i{position:absolute;left:var(--x);top:-25px;width:8px;height:15px;border-radius:1px;background:var(--color);opacity:0;animation:confetti-fall 5s ease-in var(--delay) 1 both}
+.party-confetti i:nth-child(3n){width:11px;height:11px;border-radius:50%}
+@keyframes confetti-fall{0%{opacity:0;transform:translate(0,-20px) rotate(0)}8%{opacity:.9}85%{opacity:.8}100%{opacity:0;transform:translate(var(--drift),80vh) rotate(var(--spin))}}
+@keyframes victory-arrive{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes party-hat-bob{50%{translate:0 -9px}}
+
+/* A single door-closing beat at midnight; no strobe or sudden audio. */
+.game-over-screen{min-height:calc(100svh - 123px);overflow:hidden;padding:38px 24px 48px;background:radial-gradient(ellipse at 50% 15%,#3b4740 0,#1d3336 42%,#10272b 100%);text-align:center}
+.timeout-illustration{max-width:650px;margin:0 auto 22px;border:1px solid #71877865;border-radius:10px;overflow:hidden;box-shadow:0 20px 70px #051e2470}
+.timeout-illustration svg{display:block;width:100%;height:auto}
+.timeout-door-left{animation:door-seal-left 1.4s cubic-bezier(.25,.7,.25,1) both}
+.timeout-door-right{animation:door-seal-right 1.4s cubic-bezier(.25,.7,.25,1) both}
+.timeout-lamp-glow,.timeout-rack-light{animation:midnight-dim 1.6s ease-out both}
+.game-over-copy{max-width:690px;margin:auto;animation:victory-arrive .7s .8s ease-out both}
+.game-over-copy .escape-stamp{border-color:#be8d6b80;color:#eab48c;background:#352f2c}
+.game-over-copy h1{font:clamp(39px,5vw,66px)/1.1 var(--serif);font-weight:400;letter-spacing:-1.3px;color:#f4e4c8;margin:23px 0 18px}
+.game-over-copy p{font-size:14px;line-height:1.8;color:#c8d0be}
+.game-over-copy .timeout-status{font-size:17px;color:#eab48c;margin-bottom:12px}
+.timeout-receipt{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;margin:24px auto;font:11px/1.8 var(--mono);color:#c4d1ba}
+.timeout-receipt b{color:#eab48c;font-weight:500}
+.game-over-copy .ending-actions{margin-bottom:18px}
+.game-over-copy .primary{font-size:14px;padding:15px 22px}
+.game-over-copy .secondary{color:#d5dfc6;border-color:#91a58c;padding:15px 19px}
+.game-over-copy .secondary:hover{background:#38514a}
+.game-over-copy .timeout-footnote{font-size:11px;color:#a7b8aa}
+.game-over #breadcrumb{color:#f0b189}
+@keyframes door-seal-left{from{transform:translateX(-100px)}to{transform:translateX(0)}}
+@keyframes door-seal-right{from{transform:translateX(100px)}to{transform:translateX(0)}}
+@keyframes midnight-dim{from{opacity:1}to{opacity:.3}}
+@media(max-width:650px){
+ .ending{padding:55px 20px 30px}.party-bunting i{width:21px;height:32px}
+ .celebration-cast{gap:7px;margin-top:30px}.crew-art{height:91px}
+ .celebration-cast .crew-art svg{width:65px;height:80px}.celebration-cast .celebration-caretaker .crew-art svg{width:85px;height:80px}
+ .party-hat{width:25px;height:28px;left:calc(50% - 12px);top:-2px}.party-hat:after{left:9px;width:7px;height:7px}
+ .celebration-cast .celebration-caretaker .party-hat{top:7px;left:calc(50% - 15px)}
+ .celebration-cast figcaption{font-size:9px}.celebration-cast small{font-size:9px;min-height:45px}
+ .escape-score{padding:19px;gap:15px}.escape-score>div:nth-child(2){padding-left:20px}.escape-score span{font-size:8px}.escape-score strong{font-size:30px}
+ .ending .debrief{grid-template-columns:1fr;gap:21px}.ending .debrief>div{padding-left:14px;border-left:2px solid #b7cf9860}
+ .ending .debrief h3{font-size:24px;margin:7px 0}.ending .debrief p{max-width:400px}
+ .game-over-screen{padding:25px 18px 35px}.game-over-copy h1{font-size:42px}.game-over-copy .escape-stamp{font-size:8px;letter-spacing:1px}
+ .timeout-receipt{gap:8px 20px}.ending-actions{gap:12px}
+}
+@media(prefers-reduced-motion:reduce){
+ .party-confetti{display:none}.ending h1,.party-hat,.game-over-copy,.timeout-door-left,.timeout-door-right,.timeout-lamp-glow,.timeout-rack-light{animation:none!important}
+ .ending-actions .primary{transition:none}.ending-actions .primary:hover{transform:none}
+}
+#timeout-title:focus{outline:none}.game-over #clock{color:#f0ad80}
