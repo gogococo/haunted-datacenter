@@ -44,6 +44,7 @@ flowchart TD
     Game -->|Vision and personality inference| TF[Token Factory]
     Game -->|Training packs and checkpoint-scoped inference| GPU[Warm Serverless AI GPU<br/>LoRA training and serving]
     Game -->|Create once, start/stop and call| Cooling[Separate Serverless AI CPU endpoint<br/>Room 3 control application]
+    GPU --> Storage
     Game --> Storage[Persistent filesystem<br/>Per-UUID saves, checkpoints and leaderboard]
     Secrets[SecretStash<br/>Runtime credentials] -.-> Game
 ```

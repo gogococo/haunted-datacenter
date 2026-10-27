@@ -74,10 +74,10 @@ Automated tests use temporary data and mocked cloud operations. Real browser and
 
 - Public URL: **https://halloween.curiousjaxx.dev/**
 - Project: `jc-kubecon-demo` (`project-e00nm584pr00c9xab0myzw`), `eu-north1`
-- Host endpoint: `aiendpoint-e00ymr1hqhreq80f96`
+- Host endpoint: `aiendpoint-e00r1xmcwvx7net6zy`
 - Persistent filesystem: `computefilesystem-e00ybmwmaz7tm6290n`
-- Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:stream-v1`
-- Checked image manifest: `sha256:0a66b66f23a036353d367dd7e761b60c0c5c117ecf5415d72529802fe8204a0b`
+- Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:rescue-v5`
+- Checked image manifest: `sha256:d2a79c42c5eb2ef3f8ba1c84549ac58aaa7e353c02b60694eb10f6dfb5df10cc`
 
 The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it unlocks presentation shortcuts and model experiments. Normal games use the configured backend integrations without this code.
 
@@ -90,3 +90,5 @@ The entry and expiry update passed 164 Python tests and four edge tests. Browser
 Room 2 now uses separate Token Factory personality dialogue and camera vision, a revised teaching curriculum, and an explicitly selected LoRA checkpoint on the warm Serverless GPU. Room 3 sends per-game fan/pump settings to the shared CPU app; its health route and cooling result are separate checks. Only a measured caretaker command can release the final door, and a control change during inference invalidates that approval. Existing UUID files and leaderboard records are retained. New games use the new teaching flow.
 
 The current model worker should stay warm before a stream. Cold provisioning is outside the measured training time. Stop it when finished presenting. See [training setup](TRAINING.md) for resource and persistence details.
+
+This release passed 175 Python tests, four edge tests, and a real isolated browser playthrough of Rooms 2–3. That playthrough submitted and loaded its own adapter (24.807 seconds of warm GPU training), improved from 0/12 to 12/12 fresh command checks, passed four image-to-command checks, and used a measured caretaker response to open the final door. Quiet and turbo cooling failures and the balanced success were tested against the real CPU app. Room 1 was deliberately pre-completed for this isolated QA run, which was saved as practice and excluded from the leaderboard. The completed adapter also retained its identity, hash and safe/unsafe exit behavior after replacing the worker. These measurements exclude cold provisioning and are not a latency guarantee.
