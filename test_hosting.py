@@ -67,7 +67,27 @@ class HostedHTTPTests(unittest.TestCase):
         req=urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,headers=headers)
         with urllib.request.urlopen(req) as r:return json.load(r),dict(r.headers)
     def login(self):return self.request('/api/login',{'code':'test-host-access-code'})[1]['Set-Cookie'].split(';')[0]
+    def test_access_defaults_public_even_with_obsolete_environment_flag(self):
+        with patch.dict(os.environ,{'REQUIRE_HOST_CODE':'true'}):
+            self.assertFalse(hosting.requires_player_login(server.RUNTIME))
+            self.assertTrue(self.request('/api/state')[0]['authenticated'])
+    def test_access_toggle_is_protected_persisted_and_independent_of_games(self):
+        with self.assertRaises(urllib.error.HTTPError) as e:self.request('/api/host/access')
+        self.assertEqual(e.exception.code,403)
+        cookie=self.login();settings=self.request('/api/host/access',cookie=cookie)[0]
+        self.assertFalse(settings['require_host_code'])
+        with self.assertRaises(urllib.error.HTTPError) as e:self.request('/api/host/access',{'require_host_code':True},cookie)
+        self.assertEqual(e.exception.code,403)
+        original=copy.deepcopy(server.STATE)
+        for enabled in (True,False):
+            req=urllib.request.Request(self.base+'/api/host/access?run=invalid',data=json.dumps({'require_host_code':enabled}).encode(),headers={'Cookie':cookie,'X-Host-Token':settings['token'],'Content-Type':'application/json'})
+            with urllib.request.urlopen(req) as r:self.assertEqual(json.load(r)['require_host_code'],enabled)
+            self.assertEqual(hosting.requires_player_login(server.RUNTIME),enabled)
+            self.assertEqual(self.request('/api/state')[0]['authenticated'],not enabled)
+        self.assertEqual(server.STATE,original)
+        self.assertFalse((server.RUNTIME/'runs').exists())
     def test_stream_gate_blocks_uuid_reads_and_actions_before_session_lookup(self):
+        hosting.set_player_login(server.RUNTIME,True)
         with patch.dict(os.environ,{'REQUIRE_HOST_CODE':'true'}):
             state,_=self.request('/api/state?run='+server.STATE['run_id'])
             self.assertFalse(state['authenticated']);self.assertFalse(state['has_session'])
@@ -79,7 +99,8 @@ class HostedHTTPTests(unittest.TestCase):
             self.assertIsNone(server.STATE['started'])
             self.assertEqual(self.request('/api/leaderboard')[0],{'entries':[]})
     def test_stream_login_opens_welcome_then_creates_an_independent_shift(self):
-        with patch.dict(os.environ,{'REQUIRE_HOST_CODE':'true'}),patch.object(server,'warm_existing_controller') as warm:
+        hosting.set_player_login(server.RUNTIME,True)
+        with patch.object(server,'warm_existing_controller') as warm:
             cookie=self.login();state,_=self.request('/api/state',cookie=cookie)
             self.assertTrue(state['authenticated']);self.assertTrue(state['is_host']);self.assertFalse(state['has_session'])
             state=self.request('/api/sessions',{'name':'Alex'},cookie)[0]['state']

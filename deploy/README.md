@@ -6,7 +6,7 @@ State, per-game CSRF tokens, training packs and checkpoints live in `GAME_DATA_D
 
 ## Livestream access and debug preview
 
-Set `REQUIRE_HOST_CODE=true` to require the existing host code before starting or resuming a game. UUID links alone cannot bypass this setting. Keep it unset or `false` for public play; local use remains supported. Leaderboards stay viewable without signing in. Signed-in visitors see the normal new-game/resume screen and retain separate UUID saves.
+Public New game / Resume is the default. To restrict play for a stream, open **Host controls**, unlock with the host code, enable **Require host code to play**, and save. Turn it off to reopen public play. The setting persists on the save filesystem; UUID links cannot bypass it while enabled. Leaderboards remain public.
 
 Hosts can select **Debug rooms** on the welcome screen or in Game controls. This opens an ephemeral, read-only preview with direct navigation to all three rooms. It does not start the timer, create a save, run cloud work, or submit a score. Exit preview returns to the original screen and save.
 

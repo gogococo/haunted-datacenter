@@ -272,7 +272,11 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self,handler):
         path=urlparse(self.path);value=self.headers.get('X-Run-ID') or parse_qs(path.query).get('run',[None])[0]
         admin=hosting.authenticated(self.headers)
-        if hosting.requires_player_login() and not admin:
+        if path.path=='/api/host/access':
+            if not admin:self.json({'error':'Host access required.'},403);return
+            with sessions.scope(None,admin):handler()
+            return
+        if hosting.requires_player_login(RUNTIME) and not admin:
             if path.path=='/api/state':
                 self.json({'authenticated':False,'hosted':hosting.hosted(),'has_session':False,'is_host':False,'access_code_required':True});return
             if path.path.startswith('/api/') and path.path not in ('/api/login','/api/leaderboard'):
@@ -285,11 +289,13 @@ class Handler(BaseHTTPRequestHandler):
                 else:game=legacy_game()
             elif not admin and path.path.startswith('/api/') and path.path not in ('/api/state','/api/sessions','/api/login','/api/leaderboard'):
                 self.json({'error':'Start a shift or enter its UUID first.'},401);return
-            self.has_game=bool(value or (admin and not hosting.requires_player_login()))
+            self.has_game=bool(value or (admin and not hosting.requires_player_login(RUNTIME)))
             with sessions.scope(game,admin):handler()
         except ValueError as error:self.json({'error':str(error)},404)
     def get(self):
         path=urlparse(self.path).path
+        if path=='/api/host/access':
+            self.json({'require_host_code':hosting.requires_player_login(RUNTIME),'token':hosting.access_token()});return
         if path=='/healthz': self.json({'ok':True,'version':'caretaker-queue-v6'});return
         if path=='/api/leaderboard': self.json({'entries':[{k:v for k,v in row.items() if k!='run_id'} for row in hosting.leaderboard(G.root)]});return
         if path=='/api/debug/state':
@@ -314,6 +320,17 @@ class Handler(BaseHTTPRequestHandler):
         path=urlparse(self.path).path
         origin=self.headers.get('Origin')
         if origin and urlparse(origin).netloc!=self.headers.get('Host'): self.json({'error':'Cross-origin request refused.'},403);return
+        if path=='/api/host/access':
+            if not secrets.compare_digest(self.headers.get('X-Host-Token',''),hosting.access_token()):self.json({'error':'Reopen Host controls to reconnect.'},403);return
+            try:
+                length=int(self.headers.get('Content-Length',0))
+                if not 0<length<=1024:raise ValueError('Invalid access setting.')
+                body=json.loads(self.rfile.read(length))
+                if not isinstance(body,dict):raise ValueError('Invalid access setting.')
+                hosting.set_player_login(RUNTIME,body.get('require_host_code'))
+                self.json({'require_host_code':hosting.requires_player_login(RUNTIME)})
+            except (ValueError,TypeError) as error:self.json({'error':str(error)},400)
+            return
         if path=='/api/login':
             try:
                 length=int(self.headers.get('Content-Length',0))

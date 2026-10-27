@@ -9,8 +9,21 @@ _attempts = {}
 _lock = threading.Lock()
 
 def hosted(): return os.environ.get('PUBLIC_DEPLOYMENT', '').lower() == 'true'
-def requires_player_login(): return os.environ.get('REQUIRE_HOST_CODE', '').lower() == 'true'
-def requires_login(): return hosted() or bool(os.environ.get('HOST_ACCESS_CODE')) or requires_player_login()
+def requires_player_login(root):
+    try: return json.loads((Path(root)/'host-settings.json').read_text()).get('require_host_code') is True
+    except (OSError, ValueError, TypeError, AttributeError): return False
+
+def set_player_login(root, enabled):
+    if not isinstance(enabled, bool): raise ValueError('Choose whether the host code is required.')
+    with _lock:
+        path=Path(root)/'host-settings.json';path.parent.mkdir(parents=True,exist_ok=True)
+        temp=path.with_suffix('.tmp');temp.write_text(json.dumps({'require_host_code':enabled}));temp.chmod(0o600);temp.replace(path)
+
+def access_token():
+    return hmac.new(os.environ.get('SESSION_SECRET', TOKEN_LOCAL).encode(), b'host-access-settings', hashlib.sha256).hexdigest()
+
+TOKEN_LOCAL=secrets.token_urlsafe(32)
+def requires_login(): return hosted() or bool(os.environ.get('HOST_ACCESS_CODE'))
 
 def validate_config():
     if requires_login():
