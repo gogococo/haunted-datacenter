@@ -1,6 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createProxy} from './worker.mjs';
+import {execFileSync} from 'node:child_process';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {pathToFileURL,fileURLToPath} from 'node:url';
 const app='https://halloween.example',upstream='https://upstream.example';
 test('forwards host cookie and translates exact origin without caching',async()=>{
  let received;
@@ -32,4 +37,17 @@ test('UI assets retain host and origin protection',async()=>{
  const proxy=createProxy({appOrigin:app,upstreamOrigin:upstream,assets:{'/app.js':{body:'code',type:'text/javascript'}}});
  assert.equal((await proxy(new Request('https://elsewhere.example/app.js'))).status,404);
  assert.equal((await proxy(new Request(app+'/app.js',{headers:{Origin:'https://evil.example'}}))).status,403);
+});
+test('release bundle includes the current scripts for every room',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'haunted-edge-'));
+ try{
+  const output=join(directory,'worker.mjs');
+  execFileSync(process.execPath,[fileURLToPath(new URL('./build-worker.mjs',import.meta.url)),output]);
+  const bundle=await import(pathToFileURL(output));
+  for(const name of ['app.js','room.js','noc.js','plant.js','style.css']){
+   const response=await bundle.default.fetch(new Request(bundle.APP_ORIGIN+'/'+name));
+   assert.equal(await response.text(),await readFile(new URL('../../web/'+name,import.meta.url),'utf8'));
+   assert.equal(response.headers.get('Cache-Control'),'no-store');
+  }
+ }finally{await rm(directory,{recursive:true,force:true});}
 });

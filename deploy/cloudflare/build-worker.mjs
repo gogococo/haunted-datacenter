@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const assets={};
-for(const [name,type] of [['app.js','text/javascript; charset=utf-8'],['style.css','text/css; charset=utf-8']]){
+for(const [name,type] of [['app.js','text/javascript; charset=utf-8'],['room.js','text/javascript; charset=utf-8'],['noc.js','text/javascript; charset=utf-8'],['plant.js','text/javascript; charset=utf-8'],['style.css','text/css; charset=utf-8']]){
  assets['/'+name]={type,body:await readFile(resolve(root,'web',name),'utf8')};
 }
 const source=await readFile(new URL('./worker.mjs',import.meta.url),'utf8');
