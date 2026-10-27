@@ -5,7 +5,7 @@ ROOT=Path(__file__).resolve().parent
 SYSTEM='Read the equipment fault report and return only JSON with exactly action and equipment. Follow the caretaker maintenance checklist. Do not add commentary.'
 EQUIPMENT={'gpu_rack':'GPU rack','cooling_loop':'Cooling loop','exit_door':'Exit door'}
 FAULTS={'fan_failure':'Fans stopped / overheating','coolant_leak':'Coolant leaking','locked_door':'Door latch stuck'}
-ACTIONS={'restart_fans':'Restart fan controller','stop_pump':'Stop coolant pump','release_latch':'Release door latch'}
+ACTIONS={'restart_fans':'Restart fan controller','stop_pump':'Stop coolant pump','release_latch':'Release door latch','leave_alone':'Leave it alone'}
 # Compatibility aliases for hosts inspecting earlier versions of the POC.
 VERBS=FAULTS
 ZONES=EQUIPMENT

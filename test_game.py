@@ -199,7 +199,8 @@ class FlowTests(unittest.TestCase):
   p['endpoint']={'id':'cloud-1'};p['report'].update(endpoint_id='cloud-1',request_nonce='fresh-request')
   changed=json.loads(json.dumps(SOLUTION));changed['7']['rotation']=0
   with self.assertRaises(urllib.error.HTTPError):self.post('plant/escape',{'pipes':changed})
-  self.assertTrue(self.post('plant/escape',{'pipes':SOLUTION})['state']['escaped'])
+  with self.assertRaises(urllib.error.HTTPError):self.post('plant/escape',{'pipes':SOLUTION})
+  self.assertFalse(server.STATE['escaped'])
  def test_search_alone_never_satisfies_inspection(self):
   self.post('search',{'archived':True});self.assertNotIn('board_citation',server.STATE)
   with self.assertRaises(urllib.error.HTTPError):self.post('research/extract',{'url':'https://untrusted.example/test'})

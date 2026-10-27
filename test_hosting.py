@@ -34,6 +34,8 @@ class ResultTests(unittest.TestCase):
             self.assertEqual(one,two);self.assertEqual(hosting.leaderboard(Path(d))[0]['elapsed_seconds'],60)
             self.assertEqual(len(list((Path(d)/'scores').glob('*.json'))),1)
             self.assertNotIn('noc',hosting.leaderboard(d)[0])
+            self.assertNotIn('run_id',hosting.leaderboard(d)[0])
+            self.assertNotIn(s['run_id'],json.dumps(hosting.leaderboard(d)))
     def test_unfinished_and_forged_runs_do_not_rank(self):
         with tempfile.TemporaryDirectory() as d:
             s=self.state();s['rooms'][1]=False;self.assertIsNone(hosting.record(s,d))

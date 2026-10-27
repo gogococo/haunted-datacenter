@@ -1,10 +1,12 @@
 """Optional developer asset generator; requires Pillow. Game runtime uses shipped PNGs."""
 from pathlib import Path
+import sys
 from PIL import Image,ImageDraw,ImageFont
 root=Path(__file__).resolve().parent
 font=next((str(p) for p in [Path('/System/Library/Fonts/Menlo.ttc'),Path('/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf')] if p.exists()),None)
 def f(s):return ImageFont.truetype(font,s) if font else ImageFont.load_default()
-for idx,(name,zone) in enumerate([('west','GPU RACK'),('east','COOLING LOOP'),('crypt','EXIT DOOR')]):
+for idx,(name,zone) in enumerate([('west','GPU RACK'),('east','COOLING LOOP'),('crypt','EXIT DOOR'),('healthy','GPU RACK')]):
+ if sys.argv[1:] and name not in sys.argv[1:]:continue
  im=Image.new('RGB',(960,600),'#101c2a');d=ImageDraw.Draw(im)
  d.polygon([(0,0),(960,0),(650,370),(310,370)],fill='#1c3044')
  d.polygon([(0,600),(960,600),(650,370),(310,370)],fill='#263e50')
@@ -19,7 +21,7 @@ for idx,(name,zone) in enumerate([('west','GPU RACK'),('east','COOLING LOOP'),('
     for led in range(3):d.ellipse((x+w-22-led*12,ry+7,x+w-17-led*12,ry+12),fill='#c7a475' if k==0 else '#82c3ad')
  d.rectangle((370,145,590,370),fill='#26323f',outline='#809097',width=4)
  d.rectangle((395,166,565,205),fill='#101d26');d.text((408,173),zone,font=f(21),fill='#e4d8b1')
- if name=='west':
+ if name in ('west','healthy'):
   import math
   for cx in (430,530):
    d.ellipse((cx-35,230,cx+35,300),fill='#101b22',outline='#759ba0',width=4)
@@ -27,9 +29,9 @@ for idx,(name,zone) in enumerate([('west','GPU RACK'),('east','COOLING LOOP'),('
     x=cx+int(26*math.cos(math.radians(angle)));y=265+int(26*math.sin(math.radians(angle)))
     d.line((cx,265,x,y),fill='#789c9c',width=12)
    d.ellipse((cx-6,259,cx+6,271),fill='#c9d5bb')
-  d.rectangle((389,315,571,353),fill='#a4463e',outline='#e0a26e',width=2)
-  d.text((399,324),'FAN FAULT / HOT',font=f(18),fill='#ffe1b2')
-  for x in (405,470,540):d.line([(x,135),(x-8,115),(x+6,95),(x,75)],fill='#e8a578',width=4)
+  d.rectangle((389,315,571,353),fill='#32766b' if name=='healthy' else '#a4463e',outline='#e0a26e',width=2)
+  d.text((399,324),'FANS RUNNING 63C' if name=='healthy' else 'FAN FAULT / HOT',font=f(18),fill='#ffe1b2')
+  for x in (() if name=='healthy' else (405,470,540)):d.line([(x,135),(x-8,115),(x+6,95),(x,75)],fill='#e8a578',width=4)
  elif name=='east':
   d.ellipse((160,410,810,565),fill='#54a6bf',outline='#d9f5f2',width=4)
   for x,y in [(270,470),(500,520),(690,460)]:d.arc((x-50,y-12,x+50,y+12),0,190,fill='#91b7c5',width=2)

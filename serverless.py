@@ -49,7 +49,7 @@ def public(row):
 _POOL_LOCK=threading.RLock()
 _RELEASED=set()
 _RELEASE_LOCK=threading.Lock()
-POOL_NAME='haunted-cooling-controller'
+POOL_NAME='haunted-cooling-controller-v3'
 LEASE_TTL=20*60
 ACTIVE_STATES={'RUNNING','STARTING','CREATING','UPDATING','IMAGE_PULLING','PROVISIONING'}
 
@@ -149,7 +149,7 @@ def _find(p,runtime,project):
             full=cli(['ai','endpoint','get',meta['id']])
             if owned(full,project):candidates.append(full)
     preferred=(p.get('endpoint') or {}).get('id') or _read(_pool_path(runtime)).get('id')
-    candidates.sort(key=lambda r:(r.get('status',{}).get('state') in ACTIVE_STATES,r['metadata']['id']==preferred,r['metadata'].get('created_at','')),reverse=True)
+    candidates.sort(key=lambda r:(r['metadata']['name'].startswith(POOL_NAME),r.get('status',{}).get('state') in ACTIVE_STATES,r['metadata']['id']==preferred,r['metadata'].get('created_at','')),reverse=True)
     return candidates
 
 def _cancelled(runtime,lease):
@@ -290,13 +290,14 @@ def assess(p,runtime,board):
     import plant
     if not (p.get('health') or {}).get('passed'):raise ValueError('Check the deployed app’s /healthz route first.')
     circuit=plant.check_pipes(board);nonce=secrets.token_hex(16)
-    reply=call(p,runtime,'/simulate',{'loop_sealed':circuit['passed'],'nonce':nonce})
+    request={'loop_sealed':circuit['passed'],'nonce':nonce,'settings':plant.settings(p['settings'])}
+    reply=call(p,runtime,'/simulate',request)
     from cloud_controller import VERSION
     if reply.get('service')!=VERSION or reply.get('nonce')!=nonce:raise ValueError('The controller response does not match this live request.')
     values=plant.settings(reply.get('settings',{}));measured=plant.test_controller(board,values)
-    valid=reply.get('healthy') is True and reply.get('temperature_c')==measured['temperature_c'] and reply.get('power_kw')==measured['power_kw']
+    valid=reply.get('healthy') is True and reply.get('temperature_c')==measured['temperature_c'] and reply.get('power_kw')==measured['power_kw'] and reply.get('requested_settings')==request['settings'] and values==request['settings']
     p['settings']=values;p['pipes']=board;p['pipe_report']=circuit
-    p['report']={**measured,'passed':bool(measured['passed'] and valid),'endpoint_id':p['endpoint']['id'],'remote':reply,'request_nonce':nonce,'scope':'Real Serverless app execution against simulated game telemetry.'}
+    p['report']={**measured,'passed':bool(measured['passed'] and valid),'endpoint_id':p['endpoint']['id'],'request':request,'remote':reply,'request_nonce':nonce,'scope':'Real Serverless app execution against simulated game telemetry.'}
     return 'Cooling stable. The lights hold.' if p['report']['passed'] else measured['message'] if not measured['passed'] else 'The app replied, but its measurements did not match the live circuit check.'
 
 def logs(p,runtime):

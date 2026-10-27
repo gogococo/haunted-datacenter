@@ -29,21 +29,25 @@ def stop(*_):
         except subprocess.TimeoutExpired:child.kill()
     raise SystemExit(0)
 signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
-runner=subprocess.Popen([sys.executable,str(ROOT/'caretaker_runner.py'),'--base-dir',os.environ.get('CARETAKER_BASE_DIR','/opt/models/base'),'--runtime',str(runtime)],cwd=ROOT)
-children.append(runner)
-for _ in range(120):
-    if runner.poll() is not None:raise SystemExit('Caretaker runner exited during startup.')
-    try:
-        with urllib.request.urlopen('http://127.0.0.1:8770/health',timeout=2) as response:
-            if json.load(response).get('ready'):break
-    except OSError:pass
-    time.sleep(1)
-else:stop()
+has_local_model=pathlib.Path(os.environ.get('CARETAKER_BASE_DIR','/opt/models/base')).exists()
+if has_local_model or not os.environ.get('CARETAKER_WORKER_URL'):
+    if not has_local_model:
+        raise SystemExit('Configure CARETAKER_WORKER_URL and CARETAKER_WORKER_TOKEN, or build the cpu image target for the legacy local runner.')
+    runner=subprocess.Popen([sys.executable,str(ROOT/'caretaker_runner.py'),'--base-dir',os.environ.get('CARETAKER_BASE_DIR','/opt/models/base'),'--runtime',str(runtime)],cwd=ROOT)
+    children.append(runner)
+    for _ in range(120):
+        if runner.poll() is not None:raise SystemExit('Caretaker runner exited during startup.')
+        try:
+            with urllib.request.urlopen('http://127.0.0.1:8770/health',timeout=2) as response:
+                if json.load(response).get('ready'):break
+        except OSError:pass
+        time.sleep(1)
+    else:stop()
 
 # Reload the active run's persisted adapter after a container replacement.
 try:
     state=json.loads((runtime/'state.json').read_text());n=state.get('noc',{})
-    if n.get('route')=='finetuned' and n.get('runner',{}).get('active'):
+    if n.get('route')=='finetuned' and n.get('runner',{}).get('active') and n['runner'].get('provider')!='serverless':
         sys.path.insert(0,str(ROOT));import checkpoint_flow,caretaker
         job=(n.get('job') or {}).get('id','')
         import hashlib

@@ -35,7 +35,7 @@ if (STATE['noc'].get('operation') or {}).get('status')=='running':
     STATE['noc']['operation'].update(status='interrupted',message='Server restarted during this operation. Check cloud status before retrying training or deployment.')
 
 # Preserve saved lessons/jobs while retiring the old default shortcut.
-if STATE['noc'].get('flow_version')!=2:
+if STATE['noc'].get('flow_version',1)<2:
     (RUNTIME/('before-own-checkpoint-'+str(int(time.time()))+'.json')).write_text(json.dumps(STATE))
     n=STATE['noc'];n['flow_version']=2
     if n.get('route')!='untrained' and (n.get('job') or {}).get('id')!=(n.get('submission') or {}).get('id'):
@@ -96,7 +96,7 @@ def legacy_game():return LEGACY
 
 def maintenance_access():
     n=G.state['noc'];j=n.get('submission') or {}
-    return bool(G.state['rooms'][0] and j.get('id') and j.get('pack_hash')==lessons.packet_hash(n,G.state['sources']['dataset']))
+    return bool(G.state['rooms'][0] and (n.get('flow_version',2)<3 or G.state['rooms'][1]) and j.get('id') and j.get('pack_hash')==lessons.packet_hash(n,G.state['sources']['dataset']))
 
 def save():
     temp=G.runtime/'state.tmp'; temp.write_text(json.dumps(G.state)); temp.chmod(0o600); temp.replace(G.runtime/'state.json')
@@ -125,7 +125,7 @@ def view():
         G.state['board']=switchboard.initial();save()
     if G.state['training'] and G.state['training']['status']=='running' and time.time()-G.state['training']['started']>=16:
         G.state['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**G.state,'timer':hosting.clock(G.state),'plant':{**G.state['plant'],'commissioned':plant.commissioned(G.state['plant'])},'has_session':True,'is_host':G.admin,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**G.state['noc'],'maintenance_notes':lessons.NOTES},'maintenance_notes':lessons.NOTES,'cooling_controller':serverless.pool_status(G.root),'serverless_configured':bool(serverless.config(G.root)['project_id'] and serverless.config(G.root)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(G.state['sources']['dataset']),'live_report':None,'token':G.token,'tavily_available':bool(__import__('shutil').which('tvly')),'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**G.state,'timer':hosting.clock(G.state),'plant':{**G.state['plant'],'commissioned':plant.commissioned(G.state['plant'])},'has_session':True,'is_host':G.admin,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**G.state['noc'],'maintenance_notes':lessons.catalog(G.state['noc'])},'maintenance_notes':lessons.catalog(G.state['noc']),'cooling_controller':serverless.pool_status(G.root),'serverless_configured':bool(serverless.config(G.root)['project_id'] and serverless.config(G.root)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(G.state['sources']['dataset']),'live_report':None,'token':G.token,'tavily_available':bool(__import__('shutil').which('tvly')),'training_backend':'serverless' if caretaker.training_cloud.configured() else 'tokenfactory','personalities':caretaker.PERSONALITIES,'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     noc=G.state['noc']
@@ -192,6 +192,46 @@ def launch_plant(action,body):
             current['operation']={'action':action,'status':status,'message':message,'finished':time.time()};current['revision']+=1;save()
     background(worker)
 
+def exit_status(state):
+    p=state['plant'];report=p.get('report') or {};ep=p.get('endpoint') or {}
+    circuit=plant.check_pipes(p.get('pipes',{}))
+    return {'loop_sealed':circuit['passed'],
+            'controller_ready':bool(plant.commissioned(p) and (p.get('health') or {}).get('passed') and p['health'].get('endpoint_id')==ep.get('id')),
+            'cooling_healthy':bool(report.get('passed') and report.get('request_nonce') and report.get('endpoint_id')==ep.get('id') and report.get('board_hash')==plant.fingerprint(p.get('pipes',{})) and report.get('settings')==p.get('settings'))}
+
+def launch_exit():
+    n=G.state['noc'];p=G.state['plant']
+    if not G.state['rooms'][0] or not G.state['rooms'][1]:raise ValueError('Load your trained caretaker and pass his practical exam first. His terminal is beside the controller.')
+    if (n.get('operation') or {}).get('status')=='running' or (p.get('operation') or {}).get('status')=='running':raise ValueError('Let the current inspection finish before asking for the exit.')
+    caretaker.require_own_model(n)
+    n.pop('exit_decision',None)
+    flags=exit_status(G.state);safe=all(flags.values());snapshot=copy.deepcopy(n);session=G.state['run_id']
+    proof=(p.get('revision'),caretaker.serving_id(n),copy.deepcopy(n['config']))
+    n['operation']={'action':'release-exit','status':'running','message':'The caretaker is inspecting the building and using his own door connection…'};n['revision']+=1
+    def worker():
+        try:
+            message=caretaker.run('exit-decision',snapshot,{'status':flags},G.state['sources']['dataset'],G.runtime,lambda _:None)
+            reply=snapshot['exit_decision'];approved=bool(safe and reply['checks']['correct'] and reply['checks']['complete'])
+            status='succeeded'
+            if approved:
+                try:caretaker.personality(snapshot,snapshot.get('personality') or 'friendly','The building is safe, all ghosts are accounted for, and you are now opening the final exit. Say one farewell.')
+                except ValueError:pass  # Dialogue never authorizes or blocks a verified command.
+        except (ValueError,KeyError,TypeError,OSError) as error:
+            message=str(error) if isinstance(error,ValueError) else 'The caretaker could not complete his inspection.';status='failed';approved=False
+        with G.lock:
+            if G.state['run_id']!=session:return
+            current=G.state['noc'];current['exit_decision']=snapshot.get('exit_decision');current['dialogue']=snapshot.get('dialogue')
+            current['operation']={'action':'release-exit','status':status,'message':message};current['revision']+=1
+            unchanged=proof==(G.state['plant'].get('revision'),caretaker.serving_id(current),current['config'])
+            if approved and unchanged and G.state['rooms'][1] and all(exit_status(G.state).values()):
+                G.state['rooms'][2]=True;G.state['escaped']=True;G.state['finished']=time.time()
+                event('The trained caretaker accepted the building inspection and released his door interlock. Everyone gets out together.')
+                G.state['result']=hosting.record(G.state,G.root)
+                serverless.release(G.root,G.state['run_id'],copy.deepcopy(G.state['plant'].get('endpoint')))
+            elif approved and not unchanged:current['operation'].update(status='failed',message='The controls changed during inspection. Ask the caretaker to inspect the current building again.')
+            save()
+    background(worker)
+
 def launch_plant_advice(values):
     current=G.state['plant'];session=G.state['run_id']
     if (current.get('operation') or {}).get('status')=='running':raise ValueError('The diagnostic model is already reading the logs.')
@@ -235,7 +275,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as error:self.json({'error':str(error)},404)
     def get(self):
         path=urlparse(self.path).path
-        if path=='/healthz': self.json({'ok':True,'version':'controller-book-v4'});return
+        if path=='/healthz': self.json({'ok':True,'version':'caretaker-rescue-v5'});return
         if path=='/api/leaderboard': self.json({'entries':[{k:v for k,v in row.items() if k!='run_id'} for row in hosting.leaderboard(G.root)]});return
         if path=='/api/state':
             if not self.has_game:self.json({'authenticated':True,'hosted':hosting.hosted(),'has_session':False,'is_host':False});return
@@ -412,14 +452,12 @@ class Handler(BaseHTTPRequestHandler):
                 if (p.get('operation') or {}).get('action')=='test' and p['operation']['status']=='running':raise ValueError('Wait for the cooling test before editing pipes.')
                 board=plant.normalize(b.get('pipes',{}));p['pipes']=board;p['pipe_report']=plant.check_pipes(board);p['report']=None
                 G.state['rooms'][2]=False;G.state['escaped']=False;p['revision']+=1
-            elif action=='escape':
-                board=plant.normalize(b.get('pipes',{}));report=p.get('report') or {}
-                if not G.state['rooms'][0] or not G.state['rooms'][1]:raise ValueError('Restore communications and certify the caretaker before releasing the exit.')
-                if not plant.commissioned(p):raise ValueError('Commission this controller using the settings in Alex’s maintenance book before releasing the exit.')
-                if not report.get('passed') or not report.get('request_nonce') or report.get('endpoint_id')!=(p.get('endpoint') or {}).get('id') or report.get('board_hash')!=plant.fingerprint(board) or not plant.check_pipes(board)['passed']:raise ValueError('Complete the circuit, deploy the controller, and pass its live cooling test with this layout.')
-                G.state['rooms'][2]=True;G.state['escaped']=True;G.state['finished']=time.time();event('Closed cooling circuit stable. Cloud controller healthy. Everyone leaves together.')
-                G.state['result']=hosting.record(G.state,G.root)
-                serverless.release(G.root,G.state['run_id'],copy.deepcopy(p.get('endpoint')))
+            elif action=='settings':
+                if (p.get('operation') or {}).get('status')=='running':raise ValueError('Wait for the current cooling request before changing controls.')
+                p['settings']=plant.settings(b.get('settings'));p['report']=None;p['revision']+=1
+                G.state['rooms'][2]=False;G.state['escaped']=False
+            elif action=='ask-caretaker':launch_exit()
+            elif action=='escape':raise ValueError('Only the caretaker can release this door. Ask him to inspect the building.')
             else:raise ValueError('Unknown generator-room action.')
         elif path.startswith('/api/noc/'):
             action=path.rsplit('/',1)[1]
@@ -428,7 +466,7 @@ class Handler(BaseHTTPRequestHandler):
                 hosting.practice(G.state,'Room playtest shortcut')
                 G.state['noc']['playtest']=True;G.state['noc']['revision']+=1
                 G.state['started']=time.time();G.state['paused']=False;G.state['pause_at']=None;G.state['pause_total']=0;G.state.pop('finished',None)
-            elif action in ('evidence','rehearse','try-probe'):
+            elif action in ('evidence','rehearse','try-probe','try-example'):
                 if (G.state['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the current model request.')
                 message=caretaker.run(action,G.state['noc'],b,G.state['sources']['dataset'],G.runtime,lambda _:None)
                 G.state['noc']['revision']+=1
@@ -437,12 +475,13 @@ class Handler(BaseHTTPRequestHandler):
                 if not lessons.complete(G.state['noc']):raise ValueError('Record the three camera lessons first.')
                 rows,errors=content.validate_seed(G.state['sources']['dataset'])
                 if errors:raise ValueError(errors[0])
-                return {'records':content.expand(rows,content.TRAIN_TEMPLATES)+[content.record(x['input'],x['answer']) for x in G.state['noc']['lessons'].values()]}
+                return {'records':content.expand(rows,content.TRAIN_TEMPLATES)+[content.record(x['input'],x['answer']) for x in G.state['noc']['lessons'].values()]+(lessons.curriculum('train') if G.state['noc'].get('flow_version',2)>=3 else [])}
             elif action=='record':
                 if (G.state['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the caretaker’s current request.')
                 G.state['sources']['dataset']=lessons.record(G.state['noc'],b.get('camera'),G.state['sources']['dataset'])
                 _,errors=content.validate_seed(G.state['sources']['dataset']);G.state['noc']['dataset_report']={'passed':not errors,'errors':errors};G.state['noc']['revision']+=1
                 G.state['rooms'][1]=False;G.state['rooms'][2]=False;G.state['escaped']=False
+                if G.state['noc'].get('personality'):launch_noc('speak',{'event':'The player saved a corrected training example: '+b.get('camera','')+'. It is in the training pack; the model has not trained yet. React briefly.'})
             elif action=='memory':
                 if (G.state['noc'].get('operation') or {}).get('status')=='running':raise ValueError('Wait for the caretaker to finish its current task.')
                 source=content.repair_memory(G.state['sources']['dataset'],b.get('memory'),b.get('choice'))
@@ -458,7 +497,7 @@ class Handler(BaseHTTPRequestHandler):
                 equipment=str(b.get('equipment','')).strip().lower();fault=str(b.get('fault','')).strip().lower()
                 request=caretaker.camera_request(equipment,fault)
                 observation.update(equipment=equipment,fault=fault,request=request,reviewed=True);G.state['noc']['revision']+=1
-            elif action in ('connect','inspect','vision','review-probe','probe','test','verify','train','refresh','deploy','backup','prompt-profile','load-own','final','evidence','rehearse','try-probe'):
+            elif action in ('personality','speak','connect','inspect','vision','review-probe','probe','test','verify','train','refresh','deploy','backup','prompt-profile','load-own','final','evidence','rehearse','try-probe'):
                 if not G.state['rooms'][0] and not G.state['noc'].get('playtest') and action not in ('connect','refresh'):raise ValueError('Restore Room 1 before running the caretaker. You can explore this room first.')
                 launch_noc(action,b)
             else:raise ValueError('Unknown caretaker action.')

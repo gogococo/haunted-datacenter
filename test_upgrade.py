@@ -18,7 +18,7 @@ class MQTTTests(unittest.TestCase):
   self.assertTrue(switchboard.test_subscription('midnight/+/announcement')['passed'])
 
 class DemonstrationTests(unittest.TestCase):
- def setUp(self):self.n=caretaker.initial();self.source=content.starter_records()
+ def setUp(self):self.n=caretaker.initial();self.n['flow_version']=2;self.source=content.starter_records()
  def prepare(self,id):
   note=lessons.NOTES[id]
   self.n['observations'][id]={'reviewed':True,'observation':'Actual camera report '+id,'request':'Real observation '+id,'inference':{'request_id':'vision-'+id}}
@@ -71,15 +71,15 @@ class CloudControllerTests(unittest.TestCase):
   r=cloud_controller.simulate({'nonce':'test','loop_sealed':True},75,5)
   self.assertFalse(r['healthy']);self.assertEqual(r['settings']['pump_mode'],'off')
  def test_real_call_response_must_match_current_request_nonce(self):
-  p={'endpoint':{'id':'ep'},'health':{'passed':True}}
+  p={'endpoint':{'id':'ep'},'health':{'passed':True},'settings':{'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'}}
   with patch.object(serverless,'call',return_value={'service':cloud_controller.VERSION,'nonce':'stale'}),self.assertRaisesRegex(ValueError,'live request'):serverless.assess(p,Path('.'),SOLUTION)
  def test_cloud_result_is_independently_checked_against_circuit(self):
-  p={'endpoint':{'id':'ep'},'health':{'passed':True}}
+  p={'endpoint':{'id':'ep'},'health':{'passed':True},'settings':{'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'}}
   def remote(p,rt,path,data):return cloud_controller.simulate(data)
   with patch.object(serverless,'call',side_effect=remote):serverless.assess(p,Path('.'),SOLUTION)
   self.assertTrue(p['report']['passed']);self.assertEqual(p['report']['board_hash'],plant.fingerprint(SOLUTION));self.assertTrue(p['report']['request_nonce'])
  def test_fake_remote_measurement_does_not_unlock(self):
-  p={'endpoint':{'id':'ep'},'health':{'passed':True}}
+  p={'endpoint':{'id':'ep'},'health':{'passed':True},'settings':{'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'}}
   def remote(p,rt,path,data):
    r=cloud_controller.simulate(data);r['temperature_c']=1;return r
   with patch.object(serverless,'call',side_effect=remote):serverless.assess(p,Path('.'),SOLUTION)

@@ -43,13 +43,15 @@ class OwnershipTests(unittest.TestCase):
   n,source=self.prepared();old=server.STATE
   try:
    server.STATE=server.fresh();server.STATE.update(noc=n,sources={'dataset':source},rooms=[True,False,False])
-   self.assertTrue(server.maintenance_access());self.assertFalse(server.STATE['rooms'][1])
+   self.assertFalse(server.maintenance_access());self.assertFalse(server.STATE['rooms'][1])
+   server.STATE['rooms'][1]=True
+   self.assertTrue(server.maintenance_access())
    n['submission']['pack_hash']='wrong-pack';self.assertFalse(server.maintenance_access())
   finally:server.STATE=old
  def test_old_noc_shortcut_routes_are_rejected(self):
   handler=object.__new__(server.Handler)
   for route in ('backup','prompt-profile'):
-   with self.assertRaisesRegex(ValueError,'host controls'):handler.action('/api/noc/'+route,{})
+   with patch.object(server.hosting,'clock',return_value={'expired':False}),self.assertRaisesRegex(ValueError,'host controls'):handler.action('/api/noc/'+route,{})
 
 class DownloadTests(unittest.TestCase):
  def redirect(self,url):return urllib.error.HTTPError('https://api.tokenfactory.nebius.com/file',307,'redirect',{'Location':url},None)

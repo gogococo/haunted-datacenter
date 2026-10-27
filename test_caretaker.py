@@ -8,6 +8,12 @@ def response(output='{"action":"restart_fans","equipment":"gpu_rack"}',finish='s
  return {'output':output,'finish_reason':finish,'model':'test','request_id':'test','usage':{}}
 
 class AssessmentTests(unittest.TestCase):
+ def setUp(self):
+  self.initial=c.initial
+  def legacy():
+   n=self.initial();n["flow_version"]=2;return n
+  self.patcher=patch.object(c,"initial",side_effect=legacy);self.patcher.start()
+ def tearDown(self):self.patcher.stop()
  def test_first_camera_scan_connects_and_then_inspects(self):
   n=c.initial()
   with patch.object(c,'connect') as connect,patch.object(c,'vision') as vision:c.run('inspect',n,{'camera':'west'},'',Path('.'),lambda _:None)
@@ -91,7 +97,7 @@ class AssessmentTests(unittest.TestCase):
 
 class CloudWorkflowTests(unittest.TestCase):
  def test_training_uploads_disjoint_data_and_uses_real_job_response(self):
-  n=c.initial();n['baseline']={'passed':False};n['connection']={'templates':[{'name':c.BASE}]}
+  n=c.initial();n['flow_version']=2;n['baseline']={'passed':False};n['connection']={'templates':[{'name':c.BASE}]}
   source='\n'.join(json.dumps(r) for r in content.clean_records())
   n['lessons']={key:{'input':'Observed '+key,'answer':{k:v[k] for k in ('action','equipment')}} for key,v in lessons.NOTES.items()}
   with tempfile.TemporaryDirectory() as tmp,patch.object(c.tf,'upload',side_effect=['train-id','valid-id']),patch.object(c.tf,'api',return_value={'id':'job-1','status':'queued','model':c.BASE}) as api:

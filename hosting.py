@@ -94,7 +94,7 @@ def leaderboard(runtime):
             if row['ranked'] and math.isfinite(row['elapsed_seconds']) and row['elapsed_seconds'] > 0: rows.append({k:row[k] for k in ('run_id','name','elapsed_seconds','finished_at')})
         except (OSError,ValueError,KeyError,TypeError): continue
     rows.sort(key=lambda r:(r['elapsed_seconds'],r['finished_at'],r['run_id']))
-    return [{**row,'rank':i+1} for i,row in enumerate(rows[:25])]
+    return [{**{k:v for k,v in row.items() if k!='run_id'},'rank':i+1} for i,row in enumerate(rows[:25])]
 
 _new_shifts={}
 def allow_new_shift(address):

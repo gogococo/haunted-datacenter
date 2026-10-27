@@ -122,14 +122,10 @@ class GameLifecycleTests(unittest.TestCase):
             server.Handler.action(None,'/api/host',{'action':'reset'})
         release.assert_called_once_with(server.RUNTIME,old,{'id':'only-controller'})
         self.assertNotEqual(server.STATE['run_id'],old);self.assertEqual(server.STATE['rooms'],[False]*3)
-    def test_escape_records_result_before_releasing_controller(self):
-        import plant
-        from test_plant import SOLUTION
-        server=self.server;server.STATE['rooms']=[True,True,False];p=server.STATE['plant'];p['endpoint']={'id':'only-controller'}
-        p['report']={**plant.test_controller(SOLUTION,{'fan_profile':'balanced','pump_mode':'circulate','alarms':'keep'}),'endpoint_id':'only-controller','request_nonce':'fresh-proof'}
-        def cleanup(*args):self.assertTrue(server.STATE['escaped']);self.assertEqual(server.STATE['result'],{'saved':True})
-        with patch.object(server.hosting,'record',return_value={'saved':True}),patch.object(serverless,'release',side_effect=cleanup) as release:
-            server.Handler.action(None,'/api/plant/escape',{'pipes':SOLUTION})
-        release.assert_called_once_with(server.RUNTIME,server.STATE['run_id'],{'id':'only-controller'})
+    def test_manual_escape_never_records_a_score_or_stops_controller(self):
+        server=self.server;server.STATE['rooms']=[True,True,False]
+        with patch.object(server.hosting,'record') as record,patch.object(serverless,'release') as release:
+            with self.assertRaisesRegex(ValueError,'Only the caretaker'):server.Handler.action(None,'/api/plant/escape',{})
+        record.assert_not_called();release.assert_not_called()
 
 if __name__=='__main__':unittest.main()
