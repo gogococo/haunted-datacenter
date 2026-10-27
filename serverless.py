@@ -227,6 +227,26 @@ def _deploy(p,body,runtime,lease,replace=False,shared=False):
 def deploy(p,body,runtime,lease=None,shared=False):
     with lifecycle_lock(runtime):return _deploy(p,body,runtime,lease,shared=shared)
 
+def prewarm(runtime,lease):
+    """Wake only an already commissioned shared app while earlier rooms are played.
+
+    This never creates or replaces an endpoint and does not commission the player's
+    console. Each game still has to find and enter the maintenance-book settings.
+    """
+    candidate=_read(_pool_path(runtime))
+    if not candidate.get('id') or candidate.get('name')!=POOL_NAME:return
+    with lifecycle_lock(runtime):
+        pool=_read(_pool_path(runtime));project=config(runtime)['project_id']
+        if not pool.get('id') or pool.get('project_id')!=project or pool.get('name')!=POOL_NAME or _cancelled(runtime,lease):return
+        row=cli(['ai','endpoint','get',pool['id']])
+        if not owned(row,project) or row['metadata'].get('name')!=POOL_NAME or _row_settings(row)!={'port':8000,'target':75.0,'budget':12.0}:return
+        started=time.time();phase=row.get('status',{}).get('state')
+        if phase not in ACTIVE_STATES and phase!='STOPPED':return
+        _remember({},row,runtime,lease,shared=True,lease_started=started)
+        if phase=='STOPPED' and not _cancelled(runtime,lease):
+            cli(['ai','endpoint','start',pool['id'],'--async'])
+            receipt=_read(_pool_path(runtime));receipt['state']='STARTING';_write(_pool_path(runtime),receipt)
+
 def release(runtime,lease,endpoint=None,idle=False):
     """Nonblocking cleanup. A stale reset cannot stop a newer shift's lease."""
     if not lease:return

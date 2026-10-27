@@ -110,6 +110,25 @@ class LifecycleTests(unittest.TestCase):
             self.mock.temp_original(['ai','endpoint','create'])
         self.assertNotIn('secret-token',str(error.exception))
 
+    def test_prewarm_without_an_existing_pool_never_allocates(self):
+        serverless.prewarm(self.runtime,'early-player');self.assertEqual(self.calls,[])
+    def test_prewarm_wakes_only_the_existing_current_app_and_claims_its_lease(self):
+        row=resource(state='STOPPED',name=serverless.POOL_NAME);self.rows[row['metadata']['id']]=row
+        serverless._remember({},row,self.runtime,'previous',shared=True);self.calls=[]
+        serverless.prewarm(self.runtime,'early-player')
+        self.assertEqual(self.actions(),['get','start'])
+        pool=serverless._read(serverless._pool_path(self.runtime));self.assertIn('early-player',pool['leases']);self.assertEqual(pool['state'],'STARTING')
+    def test_prewarm_does_not_trust_an_impostor_in_the_private_receipt(self):
+        row=resource(state='STOPPED',name=serverless.POOL_NAME);self.rows[row['metadata']['id']]=row
+        serverless._remember({},row,self.runtime,'previous',shared=True);self.rows[row['metadata']['id']]['spec']['args']='another-demo.py';self.calls=[]
+        serverless.prewarm(self.runtime,'early-player');self.assertEqual(self.actions(),['get'])
+        self.assertNotIn('early-player',serverless._read(serverless._pool_path(self.runtime))['leases'])
+    def test_cancelled_shift_cannot_wake_a_controller(self):
+        row=resource(state='STOPPED',name=serverless.POOL_NAME);self.rows[row['metadata']['id']]=row
+        serverless._remember({},row,self.runtime,'previous',shared=True)
+        with patch.object(serverless,'_cancelled',return_value=True):serverless.prewarm(self.runtime,'cancelled')
+        self.assertEqual(self.calls,[])
+
 class GameLifecycleTests(unittest.TestCase):
     def setUp(self):
         import server

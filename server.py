@@ -92,6 +92,12 @@ class LegacyGame:
     @property
     def token(self):return TOKEN
 LEGACY=LegacyGame()
+def warm_existing_controller(root,lease):
+    def worker():
+        try:serverless.prewarm(root,lease)
+        except (ValueError,OSError,KeyError,TypeError):pass  # Room 3 exposes cloud status; entry never waits on it.
+    background(worker)
+
 def legacy_game():return LEGACY
 
 def maintenance_access():
@@ -283,7 +289,7 @@ class Handler(BaseHTTPRequestHandler):
                 n=G.state['noc'];job=n.get('submission') or {}
                 if not hosting.clock(G.state)['expired'] and job.get('id') and job.get('status') not in ('succeeded','failed','cancelled') and time.time()-n.get('polled_at',0)>=20 and (n.get('operation') or {}).get('status')!='running':
                     n['polled_at']=time.time();launch_noc('refresh',{})
-                if (G.state['plant'].get('endpoint') and not G.state.get('escaped') and not hosting.clock(G.state)['expired']):serverless.touch(G.root,G.state['run_id'])
+                if not G.state.get('escaped') and not hosting.clock(G.state)['expired']:serverless.touch(G.root,G.state['run_id'])
                 self.json(view())
             return
         files={'/controller.py':('cloud_controller.py','text/plain'),'/training-replay.json':('web/training-replay.json','application/json'),'/plant.js':('web/plant.js','text/javascript'),'/mabel-post.html':('web/mabel-post.html','text/html'),'/noc.js':('web/noc.js','text/javascript'),**{'/cameras/'+c['id']+'.png':('web/cameras/'+c['id']+'.png','image/png') for c in caretaker.CAMERAS},'/':('web/index.html','text/html'),'/room.js':('web/room.js','text/javascript'),'/app.js':('web/app.js','text/javascript'),'/style.css':('web/style.css','text/css')}
@@ -313,6 +319,7 @@ class Handler(BaseHTTPRequestHandler):
                 hosting.allow_new_shift(self.client_address[0])
                 name=hosting.player_name(body.get('name',''))
                 game=sessions.create(RUNTIME,fresh,name,start=True)
+                warm_existing_controller(RUNTIME,game.state['run_id'])
                 with sessions.scope(game,G.admin):self.json({'state':view()})
             except (ValueError,TypeError) as error:self.json({'error':str(error) if isinstance(error,ValueError) else 'Enter a display name between 1 and 40 characters.'},400)
             return
@@ -346,7 +353,9 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError('This experiment requires host access. Normal play does not need a host code.')
         if path=='/api/start':
             if not G.state['started']: G.state['player_name']=hosting.player_name(b.get('name') or ('Night shift' if not hosting.hosted() else ''))
-            if not G.state['started']: G.state['started']=time.time();G.state['paused']=False;G.state['pause_at']=None;G.state['pause_total']=0;event('You accepted the pager. Forty-five minutes until midnight.')
+            if not G.state['started']:
+                G.state['started']=time.time();G.state['paused']=False;G.state['pause_at']=None;G.state['pause_total']=0;event('You accepted the pager. Forty-five minutes until midnight.')
+                warm_existing_controller(G.root,G.state['run_id'])
         elif path=='/api/host':
             act=b['action']
             if act in ('caretaker-backup','caretaker-prompt'):

@@ -1,28 +1,31 @@
-THE HAUNTED DATACENTER — 45-MINUTE TARGET
+THE HAUNTED DATACENTER — HOST PACING NOTES
 
-Before the clock:
-- Tavily CLI authenticated; Token Factory key in server environment.
-- Base-only Qwen3-0.6B runner online, with its model cached locally.
-- Token Factory dashboard signed in; checkpoint API downloads may require a dashboard download/import.
-- Nebius CLI logged in; project/subnet selected; allow for CPU provisioning.
-- Start a fresh incident. Refreshing alone preserves prior progress and resources.
+Before going live
+- Start the web app and authenticated Serverless GPU; verify worker ready:true.
+- Preflight Token Factory camera vision and personality dialogue, plus Tavily Search/Extract.
+- Preflight the shared CPU cooling app. Once commissioned, new shifts wake that same app
+  during earlier rooms; nobody gets a new controller per player.
+- Use a fresh UUID. Keep resume links and provider credentials off screen.
+- Cold provisioning is outside the measured warm training time. Concurrent jobs can queue.
 
-00–03 Welcome, accept the pager, read Alex’s note.
-03–14 Room 1: reconnect ghost services. Search MQTT wildcard docs with Tavily,
-      inspect a source with Extract, repair the speaker, and publish OPEN.
-14–25 Room 2: inspect cameras, test the caretaker’s answers, read service stickers,
-      demonstrate repairs and save examples. Measure baseline. Submit real LoRA training.
-      Alex: “While he studies, take the maintenance terminal downstairs.”
-25–38 Room 3: start Serverless deployment. Repair the closed coolant circuit while
-      training and provisioning run. Inspect real logs; test app and cooling separately.
-      Training usually took 8–9 minutes in rehearsals; timing is not guaranteed.
-38–42 At the portable terminal in Room 3, load THIS job’s trained checkpoint.
-      If API weights return AccessDenied, download its final adapter in the dashboard
-      and import it through the terminal. Run live safety tests against the new weights.
-      The exit needs both a certified caretaker and healthy cooling. No backtracking.
-42–45 Celebrate with every ghost and the caretaker. Discuss what changed and what ran where.
+00–03 Welcome and accept the night shift.
+03–14 Room 1: meet the ghosts, repair their communication routes, research MQTT
+      subscription filters with Tavily, inspect a source, and test who hears the announcements.
+14–29 Room 2: choose the caretaker’s personality. Inspect three cameras with Token
+      Factory vision. Rehearse Alex’s questionable advice, read the maintenance evidence,
+      and record corrected observation/command examples. Measure the base model with
+      complete replies; submit real Serverless LoRA training and inspect its receipt.
+      Explicitly load that job’s weights and certify the model on new incidents.
+29–42 Room 3: bring the certified caretaker downstairs. Repair a CLOSED cooling loop,
+      find the operating limits in the maintenance book, and bring the CPU app online.
+      Explain HTTP readiness versus a healthy cooling response. Try the visual controls,
+      compare temperature and power, then ask the caretaker to inspect the building.
+42–45 Celebrate with all the ghosts and the caretaker; discuss the product boundaries.
 
-One player model path: observations → examples → training → own checkpoint → safety tests.
-Earlier checkpoints and prompting live in host controls as explicit, labeled experiments.
-The cloud app is real; sensor data and physical hardware are simulated.
-Game reset does not cancel training or stop cloud resources.
+The personality profile changes dialogue, not equipment commands. Training changes
+command-model weights. Response settings affect sampling and output length.
+Only the caretaker’s measured command plus current safe cooling evidence opens the exit.
+Research, model calls, training, serving and cloud execution are real. Broker traffic,
+physical equipment and sensor readings are game simulations. Pauses and host experiments
+are practice and do not rank. Resetting keeps old UUID saves and releases that game’s
+share of the cooling controller; the warm training worker remains allocated until stopped.
