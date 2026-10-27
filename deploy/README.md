@@ -74,7 +74,7 @@ Automated tests use temporary data and mocked cloud operations. Real browser and
 
 - Public URL: **https://halloween.curiousjaxx.dev/**
 - Project: `jc-kubecon-demo` (`project-e00nm584pr00c9xab0myzw`), `eu-north1`
-- Host endpoint: `aiendpoint-e00sb8kv0b5ee45hcw`
+- Host endpoint: `aiendpoint-e00h8hxj2b452ceewk`
 - Persistent filesystem: `computefilesystem-e00ybmwmaz7tm6290n`
 - Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:queue-v6`
 - Checked image manifest: `sha256:b57c604ec12940ef9f0d5a5ee63e5f4642e0397deda3fa76f0e6cede95c5a000`

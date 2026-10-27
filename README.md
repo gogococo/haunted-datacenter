@@ -42,7 +42,7 @@ flowchart TD
     Edge --> Game[Nebius Serverless AI CPU endpoint<br/>Web UI and Python API]
     Game -->|Search and Extract| Tavily[Tavily]
     Game -->|Vision and personality inference| TF[Token Factory]
-    Game -->|Training packs and checkpoint-scoped inference| GPU[Warm Serverless AI GPU<br/>LoRA training and serving]
+    Game -->|Training packs and checkpoint-scoped inference| GPU[Warm Serverless AI GPU<br/>Isolated training and inference pools]
     Game -->|Create once, start/stop and call| Cooling[Separate Serverless AI CPU endpoint<br/>Room 3 control application]
     GPU --> Storage
     Game --> Storage[Persistent filesystem<br/>Per-UUID saves, checkpoints and leaderboard]
@@ -51,4 +51,4 @@ flowchart TD
 
 Token Factory handles vision and personality dialogue. A separate authenticated Serverless GPU trains and serves each player’s own LoRA adapter; the base model stays resident between jobs. Room 3's control service runs in a separate cloud endpoint. The building, broker traffic and sensor readings are simulated; the web research, model calls, training and cloud deployments are real.
 
-Locally, the browser connects directly to the Python server, with the same external service integrations. Players have independent progress and training jobs. The GPU worker serializes training and inference and selects the adapter explicitly for each request. It does not provision a model server per player. Shared co-op clicking and synchronization are still planned.
+Locally, the browser connects directly to the Python server, with the same external service integrations. Players have independent progress and training jobs. The GPU worker runs separate training and inference pools on one GPU, selecting and verifying each player’s adapter for every request. It does not provision a model server per player. Shared co-op clicking and synchronization are still planned.
