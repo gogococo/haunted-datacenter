@@ -2,7 +2,7 @@
 
 A Halloween coding escape room for a 45-minute livestream: haunted infrastructure, questionable maintenance notes and three rooms to escape. One person controls each game while friends or viewers help solve; different players can keep separate games. Verified escapes earn a place on the persistent leaderboard.
 
-**[Open the hosted demo](https://halloween.curiousjaxx.dev/)** — enter your name to start your own game. No host code is needed.
+**[Open the hosted demo](https://halloween.curiousjaxx.dev/)** — livestream access requires the host code, then you can start or resume your own game.
 
 ## Run locally
 

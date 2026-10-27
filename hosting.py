@@ -9,7 +9,8 @@ _attempts = {}
 _lock = threading.Lock()
 
 def hosted(): return os.environ.get('PUBLIC_DEPLOYMENT', '').lower() == 'true'
-def requires_login(): return hosted() or bool(os.environ.get('HOST_ACCESS_CODE'))
+def requires_player_login(): return os.environ.get('REQUIRE_HOST_CODE', '').lower() == 'true'
+def requires_login(): return hosted() or bool(os.environ.get('HOST_ACCESS_CODE')) or requires_player_login()
 
 def validate_config():
     if requires_login():

@@ -1,6 +1,6 @@
 // Public routing configuration only. Provider keys remain in Nebius SecretStash.
 export const APP_ORIGIN='https://halloween.curiousjaxx.dev';
-export const UPSTREAM_ORIGIN='https://port8080-qqvab8dsp0rj41y.tunnel.applications.eu-north1.nebius.cloud';
+export const UPSTREAM_ORIGIN='https://port8080-pk7n9wmwcegkaah.tunnel.applications.eu-north1.nebius.cloud';
 
 export function createProxy({appOrigin=APP_ORIGIN,upstreamOrigin=UPSTREAM_ORIGIN,fetcher=fetch,assets={}}={}){
  const app=new URL(appOrigin),upstream=new URL(upstreamOrigin);

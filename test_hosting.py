@@ -67,6 +67,34 @@ class HostedHTTPTests(unittest.TestCase):
         req=urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,headers=headers)
         with urllib.request.urlopen(req) as r:return json.load(r),dict(r.headers)
     def login(self):return self.request('/api/login',{'code':'test-host-access-code'})[1]['Set-Cookie'].split(';')[0]
+    def test_stream_gate_blocks_uuid_reads_and_actions_before_session_lookup(self):
+        with patch.dict(os.environ,{'REQUIRE_HOST_CODE':'true'}):
+            state,_=self.request('/api/state?run='+server.STATE['run_id'])
+            self.assertFalse(state['authenticated']);self.assertFalse(state['has_session'])
+            self.assertNotIn('run_id',state);self.assertNotIn('token',state)
+            self.assertFalse(self.request('/api/state',cookie='haunted_host=forged.bad')[0]['authenticated'])
+            for path,body in [('/api/sessions',{'name':'Alex'}),('/api/start?run='+server.STATE['run_id'],{'name':'Alex'}),('/api/debug/state',None)]:
+                with self.assertRaises(urllib.error.HTTPError) as error:self.request(path,body)
+                self.assertEqual(error.exception.code,401)
+            self.assertIsNone(server.STATE['started'])
+            self.assertEqual(self.request('/api/leaderboard')[0],{'entries':[]})
+    def test_stream_login_opens_welcome_then_creates_an_independent_shift(self):
+        with patch.dict(os.environ,{'REQUIRE_HOST_CODE':'true'}),patch.object(server,'warm_existing_controller') as warm:
+            cookie=self.login();state,_=self.request('/api/state',cookie=cookie)
+            self.assertTrue(state['authenticated']);self.assertTrue(state['is_host']);self.assertFalse(state['has_session'])
+            state=self.request('/api/sessions',{'name':'Alex'},cookie)[0]['state']
+            self.assertNotEqual(state['run_id'],server.STATE['run_id']);self.assertEqual(state['player_name'],'Alex')
+            self.assertIsNone(server.STATE['started']);warm.assert_called_once()
+    def test_debug_preview_has_fresh_state_and_creates_no_save_or_cloud_work(self):
+        original=copy.deepcopy(server.STATE)
+        with patch.object(server,'warm_existing_controller') as warm,patch.object(server,'launch_noc') as noc:
+            with self.assertRaises(urllib.error.HTTPError):self.request('/api/debug/state')
+            preview=self.request('/api/debug/state',cookie=self.login())[0]
+            self.assertTrue(preview['debug_preview']);self.assertTrue(preview['is_host'])
+            self.assertIsNone(preview['started']);self.assertEqual(preview['rooms'],[False]*3)
+            self.assertNotEqual(preview['run_id'],original['run_id'])
+            self.assertEqual(server.STATE,original);self.assertFalse((server.RUNTIME/'runs').exists())
+            warm.assert_not_called();noc.assert_not_called()
     def test_host_cookie_selects_original_save_without_a_uuid(self):
         data,_=self.request('/api/state');self.assertFalse(data['has_session']);self.assertFalse(data['is_host'])
         with self.assertRaises(urllib.error.HTTPError) as e:self.request('/api/start',{'name':'Alex'})

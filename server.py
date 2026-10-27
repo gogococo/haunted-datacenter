@@ -272,6 +272,11 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self,handler):
         path=urlparse(self.path);value=self.headers.get('X-Run-ID') or parse_qs(path.query).get('run',[None])[0]
         admin=hosting.authenticated(self.headers)
+        if hosting.requires_player_login() and not admin:
+            if path.path=='/api/state':
+                self.json({'authenticated':False,'hosted':hosting.hosted(),'has_session':False,'is_host':False,'access_code_required':True});return
+            if path.path.startswith('/api/') and path.path not in ('/api/login','/api/leaderboard'):
+                self.json({'error':'Enter the host code to play.','access_code_required':True},401);return
         try:
             game=None
             if value:
@@ -280,15 +285,20 @@ class Handler(BaseHTTPRequestHandler):
                 else:game=legacy_game()
             elif not admin and path.path.startswith('/api/') and path.path not in ('/api/state','/api/sessions','/api/login','/api/leaderboard'):
                 self.json({'error':'Start a shift or enter its UUID first.'},401);return
-            self.has_game=bool(value or admin)
+            self.has_game=bool(value or (admin and not hosting.requires_player_login()))
             with sessions.scope(game,admin):handler()
         except ValueError as error:self.json({'error':str(error)},404)
     def get(self):
         path=urlparse(self.path).path
         if path=='/healthz': self.json({'ok':True,'version':'caretaker-queue-v6'});return
         if path=='/api/leaderboard': self.json({'entries':[{k:v for k,v in row.items() if k!='run_id'} for row in hosting.leaderboard(G.root)]});return
+        if path=='/api/debug/state':
+            if not G.admin:self.json({'error':'Debug preview requires host access.'},403);return
+            preview=sessions.Game(G.root,fresh(),'debug-preview-only')
+            with sessions.scope(preview,True):self.json({**view(),'debug_preview':True})
+            return
         if path=='/api/state':
-            if not self.has_game:self.json({'authenticated':True,'hosted':hosting.hosted(),'has_session':False,'is_host':False});return
+            if not self.has_game:self.json({'authenticated':True,'hosted':hosting.hosted(),'has_session':False,'is_host':G.admin});return
             with G.lock:
                 n=G.state['noc'];job=n.get('submission') or {}
                 if not hosting.clock(G.state)['expired'] and job.get('id') and job.get('status') not in ('succeeded','failed','cancelled') and time.time()-n.get('polled_at',0)>=20 and (n.get('operation') or {}).get('status')!='running':

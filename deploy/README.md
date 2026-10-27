@@ -1,8 +1,14 @@
 # Stream hosting
 
-Players start separate games without a host code. Each gets a random UUIDv4 and a private resume link. The UUID is a bearer secret: anyone with it can resume that game. It is never listed by the leaderboard. A browser remembers its last UUID; an explicit `?run=<UUID>` URL keeps tabs on different saves independent. Shared co-op interactions remain future work.
+Players start separate games. Public play is the default; livestream mode requires the host code. Each gets a random UUIDv4 and a private resume link. The UUID is a bearer secret: anyone with it can resume that game. It is never listed by the leaderboard. A browser remembers its last UUID; an explicit `?run=<UUID>` URL keeps tabs on different saves independent. Shared co-op interactions remain future work.
 
 State, per-game CSRF tokens, training packs and checkpoints live in `GAME_DATA_DIR/runs/<UUID>/`. Scores and cloud-controller receipts remain shared at the data root. Starting over creates a new UUID and keeps the old save. The original host incident stays at the data root and remains resumable by its existing UUID, so the upgrade does not move its training artifacts.
+
+## Livestream access and debug preview
+
+Set `REQUIRE_HOST_CODE=true` to require the existing host code before starting or resuming a game. UUID links alone cannot bypass this setting. Keep it unset or `false` for public play; local use remains supported. Leaderboards stay viewable without signing in. Signed-in visitors see the normal new-game/resume screen and retain separate UUID saves.
+
+Hosts can select **Debug rooms** on the welcome screen or in Game controls. This opens an ephemeral, read-only preview with direct navigation to all three rooms. It does not start the timer, create a save, run cloud work, or submit a score. Exit preview returns to the original screen and save.
 
 ## Persistent leaderboard
 
@@ -74,10 +80,10 @@ Automated tests use temporary data and mocked cloud operations. Real browser and
 
 - Public URL: **https://halloween.curiousjaxx.dev/**
 - Project: `jc-kubecon-demo` (`project-e00nm584pr00c9xab0myzw`), `eu-north1`
-- Host endpoint: `aiendpoint-e00h8hxj2b452ceewk`
+- Host endpoint: `aiendpoint-e00b7ryavkt2d43z05`
 - Persistent filesystem: `computefilesystem-e00ybmwmaz7tm6290n`
-- Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:queue-v6`
-- Checked image manifest: `sha256:b57c604ec12940ef9f0d5a5ee63e5f4642e0397deda3fa76f0e6cede95c5a000`
+- Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:playtest-v3`
+- Checked image manifest: `sha256:df342036a10d15e53ca172fa957f4ff94bc971045711353133f2e5745d7fbd74`
 
 The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it unlocks presentation shortcuts and model experiments. Normal games use the configured backend integrations without this code.
 
@@ -102,3 +108,7 @@ The hosted worker `aiendpoint-e00gt88yqzx0bn7q04` uses four isolated training pr
 Ten simultaneous API-driven players completed all three rooms in 344.34 seconds overall, with ten separate real training jobs, each job’s own verified checkpoint, live Tavily and Token Factory calls, and one shared cooling controller. All ten passed; there were no HTTP failures, GPU-busy errors or manual retries. Training took 42.5–62.94 seconds per job during the burst; queue time is additional. Training and exams overlapped, and observed GPU memory peaked at 42,423 MiB of 46,068 MiB. These are scripted load-test timings, not human solve times or a capacity guarantee beyond the ten-player test.
 
 Six concurrent requests using three older checkpoints also retained the expected job IDs, hashes and safe-door decisions. Ten simultaneous state reads through the public domain returned the correct UUID saves. The earlier paused game and completed QA save survived replacement. All 191 Python tests and four edge tests passed; staged and full-history secret scans were clean.
+
+## Livestream access and Room 1 playtest release
+
+This release passed 194 backend tests and six edge tests. Browser checks covered the code-gated entry, empty research field, shortened bookmark and direct debug navigation through all three rooms. The deployed API rejected anonymous game creation and UUID reads, accepted the existing host code, and returned an ephemeral debug snapshot. A previously completed save and the full leaderboard matched their pre-release snapshots. Debug preview did not submit training or create a game.
