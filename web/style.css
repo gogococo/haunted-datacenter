@@ -154,6 +154,9 @@
 .timeout-door-left{animation:door-seal-left 1.4s cubic-bezier(.25,.7,.25,1) both}
 .timeout-door-right{animation:door-seal-right 1.4s cubic-bezier(.25,.7,.25,1) both}
 .timeout-lamp-glow,.timeout-rack-light{animation:midnight-dim 1.6s ease-out both}
+.timeout-caretaker-display{animation:caretaker-flicker .9s 1.25s ease-in-out both}
+.timeout-caretaker-before{animation:caretaker-clock-out .01s 1.7s step-end both}
+.timeout-caretaker-zombie{opacity:0;animation:caretaker-zombie-wake .22s 1.7s ease-out forwards}
 .game-over-copy{max-width:690px;margin:auto;animation:victory-arrive .7s .8s ease-out both}
 .game-over-copy .escape-stamp{border-color:#be8d6b80;color:#eab48c;background:#352f2c}
 .game-over-copy h1{font:clamp(39px,5vw,66px)/1.1 var(--serif);font-weight:400;letter-spacing:-1.3px;color:#f4e4c8;margin:23px 0 18px}
@@ -170,6 +173,9 @@
 @keyframes door-seal-left{from{transform:translateX(-100px)}to{transform:translateX(0)}}
 @keyframes door-seal-right{from{transform:translateX(100px)}to{transform:translateX(0)}}
 @keyframes midnight-dim{from{opacity:1}to{opacity:.3}}
+@keyframes caretaker-flicker{0%,100%{opacity:1}45%{opacity:.12}70%{opacity:.65}}
+@keyframes caretaker-clock-out{from{opacity:1}to{opacity:0}}
+@keyframes caretaker-zombie-wake{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:650px){
  .ending{padding:55px 20px 30px}.party-bunting i{width:21px;height:32px}
  .celebration-cast{gap:7px;margin-top:30px}.crew-art{height:91px}
@@ -185,6 +191,8 @@
 }
 @media(prefers-reduced-motion:reduce){
  .party-confetti{display:none}.ending h1,.party-hat,.game-over-copy,.timeout-door-left,.timeout-door-right,.timeout-lamp-glow,.timeout-rack-light{animation:none!important}
+ .timeout-caretaker-display,.timeout-caretaker-before,.timeout-caretaker-zombie{animation:none!important}
+ .timeout-caretaker-before{opacity:0}.timeout-caretaker-zombie{opacity:1}
  .ending-actions .primary{transition:none}.ending-actions .primary:hover{transform:none}
 }
 #timeout-title:focus{outline:none}.game-over #clock{color:#f0ad80}
