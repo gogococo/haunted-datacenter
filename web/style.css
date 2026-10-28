@@ -110,8 +110,8 @@
 .escape-stamp>span{width:7px;height:7px;background:#c6dca1;border-radius:50%;box-shadow:0 0 13px #c6dca1}
 .ending .eyebrow{font-size:9px;letter-spacing:2px}
 .ending .victory-copy{font-size:15px;line-height:1.8;margin:0 0 24px}
-.party-bunting{position:absolute;inset:0 0 auto;height:55px;display:flex;justify-content:space-evenly;border-top:2px solid #c1cba180;transform:rotate(-2deg) scale(1.03);transform-origin:left top;pointer-events:none}
-.party-bunting i{display:block;width:31px;height:42px;background:#d99b6a;clip-path:polygon(0 0,100% 0,50% 100%)}
+.party-bunting{position:absolute;inset:0 0 auto;height:55px;display:flex;justify-content:space-evenly;border-top:2px solid #c1cba180;pointer-events:none}
+.party-bunting i{display:block;flex:0 0 auto;width:31px;height:42px;background:#d99b6a;clip-path:polygon(0 0,100% 0,50% 100%)}
 .party-bunting i:nth-child(3n){background:#b4d49e}.party-bunting i:nth-child(3n+2){background:#b9a6d1}
 .celebration-cast{gap:clamp(15px,4vw,60px);align-items:flex-start;margin:35px auto 24px}
 .celebration-cast figure{max-width:165px;flex:1;min-width:0}
@@ -201,3 +201,6 @@
 
 /* Keep service-check replies with their controls, above the cooling experiment. */
 .service-checks{margin-top:16px;border-top:1px solid #bdc9af}.service-check{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 14px;align-items:start;padding:13px 0;border-bottom:1px solid #bdc9af}.service-check:last-child{border-bottom:0;padding-bottom:0}.service-check>button{min-width:172px}.service-check-response{margin:0;padding:7px 0;font-size:12px;line-height:1.6;overflow-wrap:anywhere}.service-check-response.running{color:#735431}.service-check-response.succeeded{color:#40683d}.service-check-response.failed{color:#a4452d}.service-check .app-logs{grid-column:1/-1;margin:0;max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#20363d;color:#efe8d4;border-radius:4px;padding:14px;font:11px/1.6 var(--mono)}@media(max-width:520px){.service-check{grid-template-columns:1fr;gap:5px}.service-check>button{justify-self:start;min-width:0}.service-check-response{padding:0}.service-check .app-logs{grid-column:1}}
+
+/* Keep the model and its response visible during the camera lesson. */
+.vision-model{margin-bottom:18px}.vision-model>small{display:block;font:10px/1.7 var(--mono);letter-spacing:.08em;color:#4e6652}.vision-model>code{display:block;margin-top:5px;font:14px/1.6 var(--mono);overflow-wrap:anywhere;color:#233e36}.vision-output{margin-top:18px}.vision-output pre{padding:14px;background:#263c43;color:#f2e6c9;font:12px/1.7 var(--mono);overflow-wrap:anywhere}.noc-room .noc-next-step{margin:0 0 16px}.noc-training-next{margin:18px 0}
