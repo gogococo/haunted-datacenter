@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "haunted-datacenter"
+version = "0.1.0"
+description = "Local Docker launcher for the Haunted Datacenter escape room"
+requires-python = ">=3.9"
+
+[project.scripts]
+haunted-datacenter = "haunted_cli:main"
+
+[tool.setuptools]
+py-modules = ["haunted_cli"]

@@ -4,9 +4,11 @@ Auth tokens remain in private runtime receipts and never enter /api/state.
 import json,os,re,secrets,subprocess,time,urllib.request,urllib.parse
 import contextlib,fcntl,threading
 from pathlib import Path
+import local_runtime
 ROOT=Path(__file__).resolve().parent
 
 def cli(args):
+    if local_runtime.enabled():raise ValueError('Nebius resource operations are disabled in local Docker mode.')
     env={**os.environ,'AI_AGENT':os.environ.get('AI_AGENT') or 'codex'}
     try:p=subprocess.run(['nebius',*args,'--format','json','--no-browser','--auth-timeout','180s' if args[:3]==['ai','endpoint','create'] else '45s','--timeout','180s' if args[:3]==['ai','endpoint','create'] else '45s','--per-retry-timeout','180s' if args[:3]==['ai','endpoint','create'] else '45s','--retries','1'],capture_output=True,text=True,timeout=200 if args[:3]==['ai','endpoint','create'] else 65,env=env)
     except (OSError,subprocess.TimeoutExpired):raise ValueError('Nebius CLI is unavailable or timed out. Check your AI Cloud login; no automatic retry.') from None
@@ -46,6 +48,7 @@ def public(row):
 
 def shared_host():
     """Explicit deployment option; standalone/local controller lifecycle is unchanged."""
+    if local_runtime.enabled():return None
     names=('SHARED_COOLING_ENDPOINT_ID','SHARED_COOLING_URL','SHARED_COOLING_TOKEN','SHARED_HOST_NAME')
     values=[os.environ.get(name,'') for name in names]
     if not any(values):return None
@@ -72,6 +75,18 @@ def shared_connect(p,body,runtime):
     p['deployment_unknown']=False
     if old.get('id')!=host['id']:p['health']=None;p['report']=None
     return 'Connected to the cooling app on the shared Nebius Serverless host. No extra VM or disk created. Check HTTP readiness, then test this circuit.'
+
+def local_connect(p,body,runtime):
+    url=local_runtime.endpoint('cooling');values=_settings(body)
+    if values!={'port':8000,'target':75.0,'budget':12.0}:raise ValueError('Use the equipment-plate settings to connect to the local cooling app.')
+    token=os.environ.get('LOCAL_COOLING_TOKEN','')
+    if not token:raise ValueError('Start the local workers with haunted-datacenter --local.')
+    old=p.get('endpoint') or {}
+    _write(private_path(runtime,'local-cooling'),{**values,'url':url,'token':token,'local':True})
+    p['endpoint']={'id':'local-cooling','name':'cooling','state':'RUNNING','url':url,'config':values,'reused':True,'local':True,'service':'Local Docker','checked_at':time.time()}
+    p['deployment_unknown']=False
+    if old.get('id')!='local-cooling':p['health']=None;p['report']=None
+    return 'Connected to the local Docker cooling container. Check HTTP readiness, then test this circuit.'
 
 # One project controller is reused between incidents. Credentials and the lease are
 # private; only the selected endpoint DTO is copied into the saved game state.
@@ -192,6 +207,7 @@ def _stop(row,runtime):
         receipt.update(state='STOPPED',cleanup_error=None);_write(_pool_path(runtime),receipt)
 
 def _deploy(p,body,runtime,lease,replace=False,shared=False):
+    if local_runtime.enabled():return local_connect(p,body,runtime)
     lease_started=time.time()
     if _cancelled(runtime,lease):raise ValueError('This shift has ended. The controller was not started.')
     if shared_host():return shared_connect(p,body,runtime)
@@ -263,7 +279,7 @@ def prewarm(runtime,lease):
     This never creates or replaces an endpoint and does not commission the player's
     console. Each game still has to find and enter the maintenance-book settings.
     """
-    if shared_host():return  # The shared host is already warm; never start another VM.
+    if local_runtime.enabled() or shared_host():return  # Existing containers/host stay warm.
     candidate=_read(_pool_path(runtime))
     if not candidate.get('id') or candidate.get('name')!=POOL_NAME:return
     with lifecycle_lock(runtime):
@@ -280,7 +296,7 @@ def prewarm(runtime,lease):
 
 def release(runtime,lease,endpoint=None,idle=False):
     """Nonblocking cleanup. A stale reset cannot stop a newer shift's lease."""
-    if shared_host():return  # Other apps and model jobs share this VM. Never stop it.
+    if local_runtime.enabled() or shared_host():return  # Never stop other apps or local containers.
     if not lease:return
     released_at=time.time()
     if not idle:
@@ -310,12 +326,14 @@ def release(runtime,lease,endpoint=None,idle=False):
     thread=threading.Thread(target=worker,daemon=True);thread.start();return thread
 
 def pool_status(runtime):
+    if local_runtime.enabled():return {'id':'local-cooling','state':'RUNNING','local':True}
     host=shared_host()
     if host:return {'id':host['id'],'state':'RUNNING','shared_host':True}
     pool=_read(_pool_path(runtime))
     return {k:pool[k] for k in ('id','state','cleanup_error') if k in pool}
 
 def refresh(p,runtime):
+    if local_runtime.enabled():return local_connect(p,{'port':8000,'target':75,'budget':12},runtime)
     if shared_host():
         shared_connect(p,{'port':8000,'target':75,'budget':12},runtime)
         return 'Shared Serverless host '+p['endpoint']['state']+'. Check HTTP readiness before testing cooling.'
@@ -327,7 +345,9 @@ def refresh(p,runtime):
 def call(p,runtime,path,data=None):
     ep=p.get('endpoint') or {};url=ep.get('url','');parts=urllib.parse.urlparse(url)
     # URLs originate only in the CLI resource response, never in a player input.
-    if parts.scheme!='https' or not parts.hostname or parts.username or parts.password:raise ValueError('The endpoint has no managed HTTPS URL yet. Refresh cloud status.')
+    if local_runtime.enabled():
+        if url!=local_runtime.endpoint('cooling') or ep.get('id')!='local-cooling':raise ValueError('Reconnect this shift to its local cooling container.')
+    elif parts.scheme!='https' or not parts.hostname or parts.username or parts.password:raise ValueError('The endpoint has no managed HTTPS URL yet. Refresh cloud status.')
     receipt=json.loads(private_path(runtime,ep['id']).read_text())
     req=urllib.request.Request(url.rstrip('/')+path,data=json.dumps(data).encode() if data is not None else None,headers={'Authorization':'Bearer '+receipt['token'],'Content-Type':'application/json'})
     from tokenfactory import NoRedirect
@@ -358,9 +378,9 @@ def assess(p,runtime,board):
     return 'Cooling stable. The lights hold.' if p['report']['passed'] else measured['message'] if not measured['passed'] else 'The app replied, but its measurements did not match the live circuit check.'
 
 def logs(p,runtime):
-    if shared_host():
+    if local_runtime.enabled() or shared_host():
         p['cloud_logs']='\n'.join(call(p,runtime,'/logs').get('lines',[]))[-6000:]
-        return 'Actual cooling-app logs retrieved from the shared Nebius Serverless host.'
+        return 'Actual cooling-app logs retrieved from the local Docker container.' if local_runtime.enabled() else 'Actual cooling-app logs retrieved from the shared Nebius Serverless host.'
     ep=p.get('endpoint')
     if not ep:raise ValueError('Deploy the app before requesting logs.')
     env={**os.environ,'AI_AGENT':os.environ.get('AI_AGENT') or 'codex'}

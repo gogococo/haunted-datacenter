@@ -4,6 +4,7 @@ No credential is serialized into game state. No simulated score unlocks this roo
 import base64,copy,hashlib,json,math,os,re,time,urllib.parse,urllib.request,threading
 from pathlib import Path
 import content,lessons,checkpoint_flow,training_cloud,tokenfactory as tf
+import local_runtime
 ROOT=Path(__file__).resolve().parent
 VERSION='noc-v4'
 CAMERAS=[
@@ -77,7 +78,7 @@ def connect(n):
   health=training_cloud.api('/healthz')
   if not health.get('ready'):raise ValueError('The training GPU is still warming up. Ask the host to finish its preflight.')
   n['training_provider']='serverless';n['config']['base_model']=health['model']
-  return 'Token Factory cameras connected. Warm Serverless training GPU ready.'
+  return 'Token Factory cameras connected. Local Docker training worker ready.' if local_runtime.enabled() else 'Token Factory cameras connected. Warm Serverless training GPU ready.'
  try:
   health=runner_call('/health');active=bool((n.get('runner') or {}).get('active') and n['runner'].get('artifact_hash')==health['artifact_hash'])
   n['runner']={**health,'active':True} if active else {**{k:health[k] for k in ('ready','model','device') if k in health},'active':False,'has_adapter':False,'artifact_hash':'base:'+health['model']}
@@ -186,7 +187,7 @@ def train(n,source,runtime):
  if n.get('training_provider')=='serverless':
   n['submission']=training_cloud.submit(n,folder,lessons.packet_hash(n,source))
   n['submission']['counts']=counts
-  return 'Your real LoRA job is on the warm Serverless GPU. Check its progress, then load its checkpoint.'
+  return 'Your real LoRA job is running on the local Docker CPU. Check its progress, then load its checkpoint.' if local_runtime.enabled() else 'Your real LoRA job is on the warm Serverless GPU. Check its progress, then load its checkpoint.'
  model=(n.get('runner') or {}).get('model') or 'Qwen/Qwen3-0.6B'
  files={name:tf.upload(folder/(name+'.jsonl')) for name in ('train','validation')}
  payload={'model':model,'training_file':files['train'],'validation_file':files['validation'],'suffix':'haunted-rehearsals','seed':42,

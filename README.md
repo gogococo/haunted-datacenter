@@ -6,6 +6,20 @@ A Halloween coding escape room for a 45-minute livestream: haunted infrastructur
 
 ## Run locally
 
+For local Docker workers, set `NEBIUS_API_KEY` (Token Factory) and
+`TAVILY_API_KEY` in `.env`, then run:
+
+```sh
+./haunted-datacenter --local
+```
+
+Open **http://127.0.0.1:8765**. Training/inference and cooling run in local CPU
+containers; Tavily and Token Factory remain real external integrations. Saves,
+checkpoints and the local leaderboard persist in Docker volumes. First launch
+downloads the base model. See [local setup and command installation](deploy/local/README.md).
+
+### Local web server with cloud workers
+
 You need Python 3.12, Tavily and Token Factory API keys, and the Nebius CLI authenticated to your AI Cloud project. Start one warm training GPU using the [training setup](deploy/TRAINING.md); its private URL and token stay on the game server.
 
 ```sh

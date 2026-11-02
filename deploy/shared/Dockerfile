@@ -10,7 +10,7 @@ COPY --from=haunted /app /app
 RUN python -m pip install --no-cache-dir tavily-cli==0.1.8 transformers==4.57.1 peft==0.17.1 accelerate==1.10.1 safetensors==0.6.2 && \
     (id -u 1000 >/dev/null 2>&1 || useradd -m -u 1000 haunted) && \
     mkdir -p /home/haunted && chown 1000:1000 /home/haunted
-COPY serverless.py /app/serverless.py
+COPY serverless.py local_runtime.py /app/
 COPY training_worker.py /opt/training_worker.py
 COPY deploy/shared /opt/shared
 ENV PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 HF_HUB_DISABLE_TELEMETRY=1

@@ -1,0 +1,70 @@
+name: haunted-local
+services:
+  haunted:
+    build:
+      context: .
+      dockerfile: deploy/local/Dockerfile
+      target: web
+    ports:
+      - '127.0.0.1:${HAUNTED_LOCAL_PORT:-8765}:8080'
+    environment:
+      HAUNTED_LOCAL_WORKERS: '1'
+      CARETAKER_WORKER_URL: http://caretaker:8000
+      CARETAKER_WORKER_TOKEN: ${LOCAL_WORKER_TOKEN:?Use the local launcher}
+      LOCAL_COOLING_URL: http://cooling:8000
+      LOCAL_COOLING_TOKEN: ${LOCAL_COOLING_TOKEN:?Use the local launcher}
+      NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      HOST: 0.0.0.0
+      PORT: '8080'
+      GAME_DATA_DIR: /data/game
+      HOME: /tmp
+    volumes:
+      - local-progress:/data
+    depends_on:
+      caretaker:
+        condition: service_healthy
+      cooling:
+        condition: service_healthy
+    init: true
+  caretaker:
+    build:
+      context: .
+      dockerfile: deploy/local/Dockerfile
+      target: worker
+    environment:
+      CARETAKER_WORKER_TOKEN: ${LOCAL_WORKER_TOKEN:?Use the local launcher}
+      CARETAKER_DEVICE: cpu
+      CARETAKER_TRAINING_WORKERS: '1'
+      CARETAKER_INFERENCE_WORKERS: '1'
+      CARETAKER_CPU_THREADS: '4'
+      CARETAKER_OPERATION_TIMEOUT: '3600'
+      TRAINING_DATA_DIR: /data/jobs
+      HF_HOME: /data/huggingface
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HOME: /tmp
+    volumes:
+      - local-models:/data
+    init: true
+    healthcheck:
+      test: ['CMD', 'python', '/app/deploy/local/healthcheck.py', 'worker']
+      interval: 5s
+      timeout: 4s
+      start_period: 20m
+      retries: 6
+  cooling:
+    build:
+      context: .
+      dockerfile: deploy/local/Dockerfile
+      target: cooling
+    environment:
+      SHARED_COOLING_TOKEN: ${LOCAL_COOLING_TOKEN:?Use the local launcher}
+    init: true
+    healthcheck:
+      test: ['CMD', 'python', '/app/deploy/local/healthcheck.py', 'cooling']
+      interval: 5s
+      timeout: 4s
+      retries: 6
+volumes:
+  local-progress:
+  local-models:

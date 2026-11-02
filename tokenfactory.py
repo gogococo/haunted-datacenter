@@ -6,6 +6,7 @@ Custom-weight registration is account-dependent and is performed in the console.
 import argparse, hashlib, json, os, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from pathlib import Path
 import content
+import local_runtime
 ROOT=Path(__file__).resolve().parent; RT=Path(os.environ.get('GAME_DATA_DIR',str(ROOT/'.runtime'))); RT.mkdir(parents=True,exist_ok=True)
 CONTROL='https://api.tokenfactory.nebius.com'
 
@@ -26,6 +27,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs): return None
 
 def api(path,method='GET',payload=None,base=CONTROL,raw=None,content_type='application/json'):
+    if local_runtime.enabled() and method!='GET' and path!='/chat/completions':raise ValueError('Local mode uses Docker training and serving; cloud resource changes are disabled.')
     if urllib.parse.urlparse(base).scheme!='https' or urllib.parse.urlparse(base).hostname not in ('api.tokenfactory.nebius.com','api.tokenfactory.eu-west1.nebius.com','api.tokenfactory.us-central1.nebius.com'): raise ValueError('Use an official Token Factory HTTPS API base URL.')
     body=raw if raw is not None else json.dumps(payload).encode() if payload is not None else None
     req=urllib.request.Request(base.rstrip('/')+path,data=body,method=method,headers={'Authorization':'Bearer '+key(),'Content-Type':content_type,'Accept':'application/json'})

@@ -1,6 +1,7 @@
 """Server-side client for a warm Serverless trainer. No credentials in saves."""
 import contextlib,contextvars,hashlib,json,os,threading,time,urllib.request,urllib.error,urllib.parse,uuid
 from tokenfactory import NoRedirect
+import local_runtime
 
 def configured(): return bool(os.environ.get('CARETAKER_WORKER_URL') and os.environ.get('CARETAKER_WORKER_TOKEN'))
 
@@ -23,11 +24,11 @@ def gpu_slot(action,n,progress):
         while True:
             if task.get('id')!=identifier or task.get('job_id')!=job:raise ValueError('GPU queue receipt did not match this operation and checkpoint.')
             if task['status']!='queued':break
-            count=task['queue_ahead'];progress('Waiting for GPU · '+str(count)+' task'+('' if count==1 else 's')+' ahead. This will continue automatically.')
+            count=task['queue_ahead'];progress(('Waiting for local CPU · ' if local_runtime.enabled() else 'Waiting for GPU · ')+str(count)+' task'+('' if count==1 else 's')+' ahead. This will continue automatically.')
             if time.monotonic()>=deadline:raise ValueError('The GPU queue wait exceeded ten minutes. Your progress is saved; retry this operation.')
             time.sleep(2);task=api('/slots/'+identifier)
         if task['status']!='active':raise ValueError('This GPU queue task ended before it could start. Retry this operation.')
-        progress('GPU ready. Continuing '+action.replace('-',' ')+'…')
+        progress(('Local CPU ready. Continuing ' if local_runtime.enabled() else 'GPU ready. Continuing ')+action.replace('-',' ')+'…')
         def heartbeat():
             while not stop.wait(15):
                 try:api('/slots/'+identifier)
@@ -43,7 +44,8 @@ def gpu_slot(action,n,progress):
 
 def api(path, body=None):
     base=os.environ.get('CARETAKER_WORKER_URL','').rstrip('/'); parsed=urllib.parse.urlparse(base)
-    if parsed.scheme!='https' or not parsed.hostname or not parsed.hostname.endswith('.nebius.cloud') or parsed.username or parsed.password:
+    if local_runtime.enabled():base=local_runtime.endpoint('caretaker')
+    elif parsed.scheme!='https' or not parsed.hostname or not parsed.hostname.endswith('.nebius.cloud') or parsed.username or parsed.password:
         raise ValueError('Configure the warm caretaker worker HTTPS endpoint before the shift.')
     req=urllib.request.Request(base+path,data=json.dumps(body).encode() if body is not None else None,headers={'Authorization':'Bearer '+os.environ.get('CARETAKER_WORKER_TOKEN',''),'Content-Type':'application/json'})
     try:
@@ -52,7 +54,7 @@ def api(path, body=None):
         try: message=json.load(error).get('error','Worker request failed.')
         except (ValueError,AttributeError): message='Worker request failed. Check its readiness and logs.'
         raise ValueError(str(message)[:500]) from None
-    except OSError:raise ValueError('The training GPU is not answering. Check the warm worker before retrying.') from None
+    except OSError:raise ValueError('The local caretaker container is not answering. Check its logs.' if local_runtime.enabled() else 'The training GPU is not answering. Check the warm worker before retrying.') from None
 
 def digest(rows):return hashlib.sha256(json.dumps(rows,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
@@ -76,7 +78,7 @@ def load(n):
     if receipt.get('id')!=job['id'] or receipt.get('artifact_hash')!=job.get('artifact_hash'):raise ValueError('The serving worker did not verify this job’s checkpoint.')
     n['job']=job.copy();n['runner']={**receipt,'active':True,'provider':'serverless','job_id':job['id']};n['route']='finetuned';n['report']=None;n.pop('final',None)
     n['config']['base_model']=job['model']
-    return 'Your new adapter is loaded on the warm GPU. Run the Mac mini practical exam.'
+    return 'Your new adapter is loaded on the '+local_runtime.worker_label()+'. Run the Mac mini practical exam.'
 
 def completion(n,prompt,baseline=False):
     active=not baseline and n.get('route')=='finetuned' and (n.get('runner') or {}).get('active')
@@ -84,4 +86,4 @@ def completion(n,prompt,baseline=False):
     result=api('/v1/chat/completions',queued_body({'messages':[{'role':'system','content':cfg['system']},{'role':'user','content':prompt}], 'temperature':cfg['temperature'],'max_tokens':cfg['max_tokens'],'job_id':job.get('id') if active else None}))
     if active and (result.get('job_id')!=job['id'] or result.get('artifact_hash')!=n['runner']['artifact_hash']):raise ValueError('The response did not use your verified checkpoint.')
     choice=result['choices'][0]
-    return {'output':choice['message']['content'],'finish_reason':choice['finish_reason'],'model':result['model']+(' · your Serverless adapter' if active else ' · base weights'),'request_id':result['id']}
+    return {'output':choice['message']['content'],'finish_reason':choice['finish_reason'],'model':result['model']+(' · your local Docker adapter' if active and local_runtime.enabled() else ' · your Serverless adapter' if active else ' · base weights'),'request_id':result['id']}

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Warm, authenticated Serverless GPU trainer and job-scoped LoRA inference.
+"""Authenticated trainer and job-scoped LoRA inference, with explicit CPU support.
 
-Independent model processes share the GPU. Training and inference use separate
-bounded pools; every request explicitly selects its own job adapter.
+Cloud model processes share a GPU through separate bounded pools. Local CPU
+training and inference share one model process. Requests select their own adapter.
 """
 import contextlib, hashlib, hmac, json, math, multiprocessing, os, queue, re, subprocess, threading, time, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 MODEL = 'Qwen/Qwen3-0.6B'
+DEVICE = os.environ.get('CARETAKER_DEVICE', 'cuda')
 REVISION = 'c1899de289a04d12100db370d81485cdf75e47ca'
 ROOT = Path(os.environ.get('TRAINING_DATA_DIR', '/mnt/data/warm-caretaker'))
 TOKEN = os.environ.get('CARETAKER_WORKER_TOKEN', '')
@@ -193,11 +194,11 @@ def submit(body):
             if JOBS[identifier]['data_hash'] != data_hash: raise ValueError('This request ID already belongs to another pack.')
             return JOBS[identifier]
         if TRAIN_PENDING.full(): raise ValueError('The training worker queue is full. No job submitted; try again shortly.')
-        job = {'id': identifier, 'status': 'queued', 'stage': 'Waiting for the warm GPU',
+        job = {'id': identifier, 'status': 'queued', 'stage': 'Waiting for the local CPU' if DEVICE == 'cpu' else 'Waiting for the warm GPU',
                'provider': 'serverless', 'model': MODEL, 'base_revision': REVISION,
                'created_at': time.time(), 'data_hash': data_hash,
                'train_sha256': digest(train), 'validation_sha256': digest(valid),
-               'counts': {'train': len(train), 'validation': len(valid)}, 'epochs': 20,
+               'counts': {'train': len(train), 'validation': len(valid)}, 'epochs': 5 if DEVICE == 'cpu' else 20,
                'progress': 0, 'queue_ahead': TRAIN_PENDING.qsize() + len(ACTIVE_TRAINING)}
         path = folder(identifier); path.mkdir(parents=True, exist_ok=True)
         (path / 'data.json').write_text(json.dumps({'train': train, 'validation': valid}))
@@ -216,7 +217,7 @@ def encode(row):
 
 def batch(rows):
     width = ((max(len(r['input_ids']) for r in rows) + 7) // 8) * 8
-    return {k: torch.tensor([r[k] + [(-100 if k == 'labels' else tokenizer.pad_token_id if k == 'input_ids' else 0)] * (width - len(r[k])) for r in rows], device='cuda') for k in ('input_ids', 'attention_mask', 'labels')}
+    return {k: torch.tensor([r[k] + [(-100 if k == 'labels' else tokenizer.pad_token_id if k == 'input_ids' else 0)] * (width - len(r[k])) for r in rows], device=DEVICE) for k in ('input_ids', 'attention_mask', 'labels')}
 
 def load_adapter(identifier):
     job = JOBS.get(identifier)
@@ -251,11 +252,23 @@ def train_job(identifier):
                 random.shuffle(train)
                 for i in range(0, len(train), 16):
                     optimizer.zero_grad(set_to_none=True)
-                    loss = model(**batch(train[i:i+16])).loss
-                    loss.backward(); torch.nn.utils.clip_grad_norm_(params, 1)
+                    rows = train[i:i+16]
+                    microbatch = 4 if DEVICE == 'cpu' else 16
+                    for offset in range(0, len(rows), microbatch):
+                        subset = rows[offset:offset+microbatch]
+                        loss = model(**batch(subset)).loss
+                        (loss * len(subset) / len(rows)).backward()
+                    torch.nn.utils.clip_grad_norm_(params, 1)
                     optimizer.step(); step += 1
                     lr = 4e-4 * (0.25 + 0.75 * (1 + math.cos(math.pi * step / steps)) / 2)
                     for group in optimizer.param_groups: group['lr'] = lr
+                    if DEVICE == 'cpu':
+                        elapsed = time.monotonic() - started
+                        job.update(progress=round(100*step/steps), epoch=epoch+1,
+                                   loss=round(float(loss.detach()),6),
+                                   elapsed_seconds=round(elapsed),
+                                   estimated_remaining_seconds=round(elapsed*(steps-step)/step))
+                        store(job)
                 job.update(progress=round(100 * step / steps), epoch=epoch+1, loss=round(float(loss.detach()), 6)); store(job)
             model.eval()
             with torch.inference_mode():
@@ -278,7 +291,7 @@ def train_job(identifier):
         finally:
             model.eval(); model.config.use_cache = True
             for p in model.parameters(): p.requires_grad_(False)
-            torch.cuda.empty_cache()
+            if DEVICE == 'cuda': torch.cuda.empty_cache()
             CURRENT_JOB = None
 
 def model_generation(body):
@@ -291,7 +304,7 @@ def model_generation(body):
     job = load_adapter(identifier) if identifier else None
     if job: model.set_adapter(identifier)
     model.eval(); tokenizer.padding_side = 'left'
-    inputs = tokenizer(prefix(msgs), return_tensors='pt', add_special_tokens=False).to('cuda')
+    inputs = tokenizer(prefix(msgs), return_tensors='pt', add_special_tokens=False).to(DEVICE)
     if inputs['input_ids'].shape[1] > 768: raise ValueError('Keep the report and instructions short.')
     sampling = {'do_sample': temperature > 0}
     if temperature > 0: sampling.update(temperature=temperature, top_p=1.0, top_k=0)
@@ -320,12 +333,13 @@ def initialize_model():
     import torch
     from peft import LoraConfig, get_peft_model
     from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
-    torch.set_num_threads(1)
-    assert torch.cuda.is_available(), 'Start this worker on a GPU.'
+    if DEVICE not in ('cpu', 'cuda'): raise ValueError('Choose cpu or cuda for CARETAKER_DEVICE.')
+    torch.set_num_threads(int(os.environ.get('CARETAKER_CPU_THREADS', '4')) if DEVICE == 'cpu' else 1)
+    if DEVICE == 'cuda': assert torch.cuda.is_available(), 'Start this worker on a GPU, or explicitly select CARETAKER_DEVICE=cpu locally.'
     tokenizer = AutoTokenizer.from_pretrained(MODEL, revision=REVISION, trust_remote_code=False)
     tokenizer.pad_token = tokenizer.eos_token
-    base = AutoModelForCausalLM.from_pretrained(MODEL, revision=REVISION, torch_dtype=torch.bfloat16,
-             trust_remote_code=False, attn_implementation='sdpa').to('cuda')
+    base = AutoModelForCausalLM.from_pretrained(MODEL, revision=REVISION, torch_dtype=torch.float32 if DEVICE == 'cpu' else torch.bfloat16,
+             trust_remote_code=False, attn_implementation='sdpa').to(DEVICE)
     model = get_peft_model(base, lora_config(), adapter_name='reserved')
     for parameter in model.parameters(): parameter.requires_grad_(False)
 
@@ -377,7 +391,7 @@ class ModelProcess:
         with self.lock:
             if not self.process.is_alive(): self.start()
             self.connection.send((action, body))
-            deadline = time.monotonic() + (600 if action == 'train' else 120)
+            deadline = time.monotonic() + (int(os.environ.get('CARETAKER_OPERATION_TIMEOUT', '3600')) if DEVICE == 'cpu' and action == 'train' else 600 if action == 'train' else 120)
             while time.monotonic() < deadline:
                 if not self.connection.poll(.25):
                     if not self.process.is_alive(): raise ValueError('An isolated GPU worker stopped; retry this operation.')
@@ -391,6 +405,7 @@ class ModelProcess:
             raise ValueError('An isolated GPU operation timed out; retry this operation.')
 
 def gpu_memory():
+    if DEVICE == 'cpu': return {}
     # nvidia-smi observes all model processes without creating another CUDA context.
     try:
         result = subprocess.run(['nvidia-smi', '--query-gpu=memory.total,memory.used,utilization.gpu',
@@ -402,7 +417,7 @@ def gpu_memory():
 def health():
     with SLOTS_LOCK: active = sum(s['status'] == 'active' for s in SLOTS.values())
     return {'ready': READY, 'model': MODEL, 'base_revision': REVISION, 'queue_version': 2,
-            'queued': PENDING.qsize() + TRAIN_PENDING.qsize(), 'provider': 'Nebius Serverless AI',
+            'queued': PENDING.qsize() + TRAIN_PENDING.qsize(), 'provider': 'Local Docker' if DEVICE == 'cpu' else 'Nebius Serverless AI', 'device': DEVICE,
             'capacity': {'training': TRAINING_WORKERS, 'inference': INFERENCE_WORKERS},
             'active': {'training': len(ACTIVE_TRAINING), 'inference': active},
             'peak': {'training': PEAK_TRAINING, 'inference': PEAK_INFERENCE}, 'gpu': gpu_memory()}
@@ -460,6 +475,17 @@ def main():
         except (OSError,ValueError,KeyError): continue
     server = ThreadingHTTPServer(('0.0.0.0',int(os.environ.get('CARETAKER_WORKER_PORT','8000'))),Handler)
     threading.Thread(target=server.serve_forever,daemon=True).start()
+    # A local CPU shares one model process between its queues to fit Docker Desktop.
+    if DEVICE == 'cpu':
+        if TRAINING_WORKERS != 1 or INFERENCE_WORKERS != 1:
+            raise SystemExit('Local CPU mode uses one training and one inference lane on a shared model process.')
+        runtime = ModelProcess('local'); RUNTIMES.append(runtime)
+        threading.Thread(target=training_loop,args=(runtime,),daemon=True).start()
+        threading.Thread(target=inference_loop,args=(runtime,),daemon=True).start()
+        READY = True
+        print(json.dumps({'event':'local-worker-ready','model':MODEL,'device':DEVICE}),flush=True)
+        threading.Event().wait()
+        return
     # Load sequentially to avoid multiplying temporary CPU RAM during model startup.
     for role, count, loop in (('training', TRAINING_WORKERS, training_loop), ('inference', INFERENCE_WORKERS, inference_loop)):
         for _ in range(count):

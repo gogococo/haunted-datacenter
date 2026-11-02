@@ -15,6 +15,8 @@
 !deploy/bootstrap.py
 !deploy/shared/
 !deploy/shared/**
+!deploy/local/
+!deploy/local/**
 !README.md
 !RUN-OF-SHOW.txt
 !Dockerfile

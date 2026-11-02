@@ -25,3 +25,7 @@ data/validation.jsonl
 
 models/
 .venv/
+.local-docker/
+*.egg-info/
+build/
+dist/

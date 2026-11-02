@@ -5,6 +5,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse,parse_qs
 import content
+import local_runtime
 import caretaker, copy
 import switchboard,clue_post,plant,lessons,serverless,hosting,sessions,telemetry
 
@@ -132,7 +133,7 @@ def view():
         G.state['board']=switchboard.initial();save()
     if G.state['training'] and G.state['training']['status']=='running' and time.time()-G.state['training']['started']>=16:
         G.state['training']['status']='succeeded'; event('REHEARSAL: scripted training walkthrough complete. No weights trained.'); save()
-    return {**G.state,'timer':hosting.clock(G.state),'plant':{**G.state['plant'],'commissioned':plant.commissioned(G.state['plant'])},'has_session':True,'is_host':G.admin,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**G.state['noc'],'maintenance_notes':lessons.catalog(G.state['noc'])},'maintenance_notes':lessons.catalog(G.state['noc']),'cooling_controller':serverless.pool_status(G.root),'serverless_configured':bool(serverless.config(G.root)['project_id'] and serverless.config(G.root)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(G.state['sources']['dataset']),'live_report':None,'token':G.token,'tavily_available':bool(__import__('shutil').which('tvly')),'training_backend':'serverless' if caretaker.training_cloud.configured() else 'tokenfactory','personalities':caretaker.PERSONALITIES,'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
+    return {**G.state,'timer':hosting.clock(G.state),'plant':{**G.state['plant'],'commissioned':plant.commissioned(G.state['plant'])},'has_session':True,'is_host':G.admin,'authenticated':True,'hosted':hosting.hosted(),'maintenance_route_open':maintenance_access(),'noc':{**G.state['noc'],'maintenance_notes':lessons.catalog(G.state['noc'])},'maintenance_notes':lessons.catalog(G.state['noc']),'cooling_controller':serverless.pool_status(G.root),'local_workers':local_runtime.enabled(),'serverless_configured':local_runtime.enabled() or bool(serverless.config(G.root)['project_id'] and serverless.config(G.root)['subnet_id']),'plant_definition':plant.definition(),'training_seed_before':content.starter_records(),'mabel_post_url':clue_post.public_url(),'mabel_post_html':clue_post.article(),'memory_status':content.memory_status(G.state['sources']['dataset']),'live_report':None,'token':G.token,'tavily_available':bool(__import__('shutil').which('tvly')),'training_backend':'local-docker' if local_runtime.enabled() else 'serverless' if caretaker.training_cloud.configured() else 'tokenfactory','personalities':caretaker.PERSONALITIES,'nebius_configured':bool(os.environ.get('NEBIUS_API_KEY') or os.environ.get('NEBIUS_TOKEN_FACTORY_KEY'))}
 
 def launch_noc(action,body):
     operation_started=time.monotonic()
