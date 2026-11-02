@@ -13,6 +13,8 @@
 !puzzles/**
 !deploy/
 !deploy/bootstrap.py
+!deploy/shared/
+!deploy/shared/**
 !README.md
 !RUN-OF-SHOW.txt
 !Dockerfile

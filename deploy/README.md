@@ -1,5 +1,11 @@
 # Stream hosting
 
+The current hosted demos use the [shared Serverless host](shared/README.md): one
+L40S VM serves both websites, caretaker training/inference and cooling control.
+The two original persistent filesystems remain attached. The standalone CPU
+endpoint instructions below remain available for local or separate deployments.
+PostHog is hosted by PostHog Cloud and needs no Nebius VM.
+
 Players start separate games. Public play is the default; livestream mode requires the host code. Each gets a random UUIDv4 and a private resume link. The UUID is a bearer secret: anyone with it can resume that game. It is never listed by the leaderboard. A browser remembers its last UUID; an explicit `?run=<UUID>` URL keeps tabs on different saves independent. Shared co-op interactions remain future work.
 
 State, per-game CSRF tokens, training packs and checkpoints live in `GAME_DATA_DIR/runs/<UUID>/`. Scores and cloud-controller receipts remain shared at the data root. Starting over creates a new UUID and keeps the old save. The original host incident stays at the data root and remains resumable by its existing UUID, so the upgrade does not move its training artifacts.
@@ -36,7 +42,7 @@ Open http://127.0.0.1:8765. The default image contains the web app and Tavily CL
 
 Room 3 additionally needs authenticated Nebius CLI access. For an unattended container, provide `NEBIUS_SERVICE_ACCOUNT_ID`, `NEBIUS_PUBLIC_KEY_ID`, and `NEBIUS_PRIVATE_KEY` using secret injection. The bootstrap configures the CLI for that identity. Never add a private key to `.env.example`, the image, or Git. A token-factory API key alone cannot deploy AI Cloud endpoints.
 
-## Nebius deployment
+## Standalone Nebius deployment
 
 Build a Linux amd64 image and push it to the project's private registry. The `.dockerignore` is an allowlist: no local runtime, environment files, model adapters, or cloud credentials enter the build context. The default stream image excludes model weights and PyTorch; the warm worker loads its pinned model separately.
 
@@ -78,12 +84,13 @@ Automated tests use temporary data and mocked cloud operations. Real browser and
 
 ## Current release
 
-- Public URL: **https://halloween.curiousjaxx.dev/**
+- Public URLs: **https://halloween.curiousjaxx.dev/** and **https://kube.curiousjaxx.dev/**
 - Project: `jc-kubecon-demo` (`project-e00nm584pr00c9xab0myzw`), `eu-north1`
-- Host endpoint: `aiendpoint-e00b7ryavkt2d43z05`
-- Persistent filesystem: `computefilesystem-e00ybmwmaz7tm6290n`
-- Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/haunted-datacenter:playtest-v3`
-- Checked image manifest: `sha256:df342036a10d15e53ca172fa957f4ff94bc971045711353133f2e5745d7fbd74`
+- Shared endpoint: `aiendpoint-e00jg2engv8s4knq5z` (`shared-demos-20261102-v2`)
+- Haunted filesystem: `computefilesystem-e00ybmwmaz7tm6290n`
+- Cube filesystem: `computefilesystem-e00yxeg42egqjfhrpy`
+- Image: `cr.eu-north1.nebius.cloud/e00qmygzhgqbsky5mh/shared-demos:20261102-v2`
+- Checked image digest: `sha256:aa30388fc68eaf4d65d47c62c4036b6cace85afb498855a7decc06181941244e`
 
 The project deployment identity's current public key expires November 30, 2026. Rotate it in SecretStash before then if keeping the demo online. Keep the host access code private; it unlocks presentation shortcuts and model experiments. Normal games use the configured backend integrations without this code.
 
@@ -95,13 +102,13 @@ The entry and expiry update passed 164 Python tests and four edge tests. Browser
 
 Room 2 now uses separate Token Factory personality dialogue and camera vision, a revised teaching curriculum, and an explicitly selected LoRA checkpoint on the warm Serverless GPU. Room 3 sends per-game fan/pump settings to the shared CPU app; its health route and cooling result are separate checks. Only a measured caretaker command can release the final door, and a control change during inference invalidates that approval. Existing UUID files and leaderboard records are retained. New games use the new teaching flow.
 
-The current model worker should stay warm before a stream. Cold provisioning is outside the measured training time. Stop it when finished presenting. See [training setup](TRAINING.md) for resource and persistence details.
+The model worker should stay warm before a stream. Cold provisioning is outside the measured training time. In the current shared deployment, stopping the worker's endpoint also stops both websites; keep the shared host running while either demo is in use. See [training setup](TRAINING.md) for resource and persistence details.
 
 This release passed 179 Python tests, four edge tests, and a real isolated browser playthrough of Rooms 2–3. That playthrough submitted and loaded its own adapter (24.807 seconds of warm GPU training), improved from 0/12 to 12/12 fresh command checks, passed four image-to-command checks, and used a measured caretaker response to open the final door. Quiet and turbo cooling failures and the balanced success were tested against the real CPU app. Room 1 was deliberately pre-completed for this isolated QA run, which was saved as practice and excluded from the leaderboard. The completed adapter also retained its identity, hash and safe/unsafe exit behavior after replacing the worker. These measurements exclude cold provisioning and are not a latency guarantee.
 
 A fresh anonymous cloud integration run also completed all three rooms using live Tavily Search/Extract, Token Factory vision/dialogue, its own Serverless training job (25.463 seconds), checkpoint loading, certification, the reused CPU controller and the trained caretaker’s final door command. Its deliberately paused practice result was excluded from the leaderboard. The public domain, deployed asset hashes and preservation of the earlier paused save/job were checked after cutover.
 
-## Concurrent GPU release verification
+## Earlier concurrent GPU release verification
 
 The hosted worker `aiendpoint-e00gt88yqzx0bn7q04` uses four isolated training processes and six isolated exam processes on one L40S. The web app retains the checked `queue-v6` image; only its worker URL and public upstream changed. No additional GPU or per-player cooling endpoint was allocated.
 

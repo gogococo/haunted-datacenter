@@ -44,6 +44,35 @@ def public(row):
     urls=[u for u in status.get('public_endpoints',[]) if isinstance(u,str) and u.startswith('https://')]
     return {'id':meta.get('id'),'name':meta.get('name'),'state':status.get('state','STARTING'),'url':urls[0] if urls else '', 'service':'Nebius Serverless AI','checked_at':time.time()}
 
+def shared_host():
+    """Explicit deployment option; standalone/local controller lifecycle is unchanged."""
+    names=('SHARED_COOLING_ENDPOINT_ID','SHARED_COOLING_URL','SHARED_COOLING_TOKEN','SHARED_HOST_NAME')
+    values=[os.environ.get(name,'') for name in names]
+    if not any(values):return None
+    if not all(values):raise ValueError('Shared cooling deployment configuration is incomplete.')
+    identifier,url,token,name=values
+    parts=urllib.parse.urlparse(url)
+    if not re.fullmatch(r'aiendpoint-[a-z0-9]+',identifier) or parts.scheme!='https' or not (parts.hostname or '').endswith('.nebius.cloud') or parts.username or parts.password:
+        raise ValueError('Shared cooling deployment configuration is invalid.')
+    return {'id':identifier,'url':url.rstrip('/'),'token':token,'name':name}
+
+def shared_connect(p,body,runtime):
+    host=shared_host();values=_settings(body)
+    if values!={'port':8000,'target':75.0,'budget':12.0}:
+        raise ValueError('Use the equipment-plate settings to connect to the shared cooling app.')
+    row=cli(['ai','endpoint','get',host['id']]);spec=row.get('spec',{});meta=row.get('metadata',{})
+    env={v['name']:v.get('value') for v in spec.get('environment_variables',[])}
+    if (meta.get('parent_id')!=config(runtime)['project_id'] or meta.get('name')!=host['name'] or
+        env.get('SHARED_DEMO_HOST')!='1' or host['url'] not in row.get('status',{}).get('public_endpoints',[]) or
+        not any(v.get('container_port')==8000 for v in spec.get('ports',[]))):
+        raise ValueError('Shared cooling host identity could not be verified.')
+    old=p.get('endpoint') or {}
+    _write(private_path(runtime,host['id']),{**values,**host,'project_id':config(runtime)['project_id'],'shared_host':True})
+    p['endpoint']={**public(row),'url':host['url'],'config':values,'reused':True,'shared_host':True}
+    p['deployment_unknown']=False
+    if old.get('id')!=host['id']:p['health']=None;p['report']=None
+    return 'Connected to the cooling app on the shared Nebius Serverless host. No extra VM or disk created. Check HTTP readiness, then test this circuit.'
+
 # One project controller is reused between incidents. Credentials and the lease are
 # private; only the selected endpoint DTO is copied into the saved game state.
 _POOL_LOCK=threading.RLock()
@@ -165,6 +194,7 @@ def _stop(row,runtime):
 def _deploy(p,body,runtime,lease,replace=False,shared=False):
     lease_started=time.time()
     if _cancelled(runtime,lease):raise ValueError('This shift has ended. The controller was not started.')
+    if shared_host():return shared_connect(p,body,runtime)
     if p.get('deployment_unknown'):raise ValueError('A deployment had an uncertain result. Check Serverless AI in the console before submitting another.')
     c=config(runtime);values=_settings({**(p.get('endpoint') or {}).get('config',{}),**body})
     if not c['project_id'] or not c['subnet_id']:raise ValueError('Configure your Nebius AI Cloud project and subnet before deploying. See README → Serverless setup.')
@@ -233,6 +263,7 @@ def prewarm(runtime,lease):
     This never creates or replaces an endpoint and does not commission the player's
     console. Each game still has to find and enter the maintenance-book settings.
     """
+    if shared_host():return  # The shared host is already warm; never start another VM.
     candidate=_read(_pool_path(runtime))
     if not candidate.get('id') or candidate.get('name')!=POOL_NAME:return
     with lifecycle_lock(runtime):
@@ -249,6 +280,7 @@ def prewarm(runtime,lease):
 
 def release(runtime,lease,endpoint=None,idle=False):
     """Nonblocking cleanup. A stale reset cannot stop a newer shift's lease."""
+    if shared_host():return  # Other apps and model jobs share this VM. Never stop it.
     if not lease:return
     released_at=time.time()
     if not idle:
@@ -278,10 +310,15 @@ def release(runtime,lease,endpoint=None,idle=False):
     thread=threading.Thread(target=worker,daemon=True);thread.start();return thread
 
 def pool_status(runtime):
+    host=shared_host()
+    if host:return {'id':host['id'],'state':'RUNNING','shared_host':True}
     pool=_read(_pool_path(runtime))
     return {k:pool[k] for k in ('id','state','cleanup_error') if k in pool}
 
 def refresh(p,runtime):
+    if shared_host():
+        shared_connect(p,{'port':8000,'target':75,'budget':12},runtime)
+        return 'Shared Serverless host '+p['endpoint']['state']+'. Check HTTP readiness before testing cooling.'
     ep=p.get('endpoint')
     if not ep:raise ValueError('Deploy the cooling controller first.')
     row=cli(['ai','endpoint','get',ep['id']]);p['endpoint']={**ep,**public(row)}
@@ -321,6 +358,9 @@ def assess(p,runtime,board):
     return 'Cooling stable. The lights hold.' if p['report']['passed'] else measured['message'] if not measured['passed'] else 'The app replied, but its measurements did not match the live circuit check.'
 
 def logs(p,runtime):
+    if shared_host():
+        p['cloud_logs']='\n'.join(call(p,runtime,'/logs').get('lines',[]))[-6000:]
+        return 'Actual cooling-app logs retrieved from the shared Nebius Serverless host.'
     ep=p.get('endpoint')
     if not ep:raise ValueError('Deploy the app before requesting logs.')
     env={**os.environ,'AI_AGENT':os.environ.get('AI_AGENT') or 'codex'}

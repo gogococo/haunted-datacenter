@@ -26,7 +26,7 @@ The game web server does not need PyTorch when using the warm GPU. The optional 
 
 Open **http://127.0.0.1:8765**, choose **New game** or **Resume**, then **Enter The Datacenter**. New games need a display name; resuming needs a saved UUID or link. Each game gets a UUID and private resume link; keep either to continue in another browser. Progress and checkpoints live in `.runtime/runs/<UUID>/`, with a shared persistent leaderboard. Keep keys server-side and out of Git.
 
-Playthroughs share one real cooling-controller endpoint. Finishing or starting over releases your game’s share; it stops when nobody else is using it. Starting over keeps your previous UUID save and scores. Training jobs continue independently on the warm worker; their receipts remain in each save. For Docker and cloud hosting, see the [deployment guide](deploy/README.md).
+Playthroughs share one real cooling application. The hosted demos share a Serverless VM, which stays warm; standalone deployments can stop an idle controller. Starting over keeps your previous UUID save and scores. Training jobs continue independently on the warm worker; their receipts remain in each save. For Docker and cloud hosting, see the [deployment guide](deploy/README.md).
 
 ## The rooms
 
@@ -39,16 +39,23 @@ Playthroughs share one real cooling-controller endpoint. Finishing or starting o
 ```mermaid
 flowchart TD
     Browser[Player browsers · independent UUID saves] --> Edge[Cloudflare Worker<br/>halloween.curiousjaxx.dev]
-    Edge --> Game[Nebius Serverless AI CPU endpoint<br/>Web UI and Python API]
+    Edge --> Game
+    subgraph Shared[One Nebius Serverless AI L40S VM]
+      Game[Web UI and Python API · CPU]
+      GPU[Caretaker training and inference · GPU]
+      Cooling[Cooling control application · CPU]
+      Cube[Crack the Cube website · CPU]
+    end
     Game -->|Search and Extract| Tavily[Tavily]
     Game -->|Vision and personality inference| TF[Token Factory]
-    Game -->|Training packs and checkpoint-scoped inference| GPU[Warm Serverless AI GPU<br/>Isolated training and inference pools]
-    Game -->|Create once, start/stop and call| Cooling[Separate Serverless AI CPU endpoint<br/>Room 3 control application]
+    Game -->|Training packs and checkpoint-scoped inference| GPU
+    Game -->|Connect and test| Cooling
     GPU --> Storage
     Game --> Storage[Persistent filesystem<br/>Per-UUID saves, checkpoints and leaderboard]
     Secrets[SecretStash<br/>Runtime credentials] -.-> Game
+    Game --> Analytics[PostHog Cloud]
 ```
 
-Token Factory handles vision and personality dialogue. A separate authenticated Serverless GPU trains and serves each player’s own LoRA adapter; the base model stays resident between jobs. Room 3's control service runs in a separate cloud endpoint. The building, broker traffic and sensor readings are simulated; the web research, model calls, training and cloud deployments are real.
+Token Factory handles vision and personality dialogue. The authenticated caretaker worker trains and serves each player’s own LoRA adapter; the base model stays resident between jobs. The hosted game, cooling application and Cube demo use separate processes on that same Serverless VM, retaining their persistent volumes. PostHog runs in PostHog Cloud. The building, broker traffic and sensor readings are simulated; the web research, model calls, training and cloud applications are real.
 
 Locally, the browser connects directly to the Python server, with the same external service integrations. Players have independent progress and training jobs. The GPU worker runs separate training and inference pools on one GPU, selecting and verifying each player’s adapter for every request. It does not provision a model server per player. Shared co-op clicking and synchronization are still planned.

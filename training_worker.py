@@ -458,7 +458,7 @@ def main():
             if job['status'] in ('queued','running'): job.update(status='failed',stage='Worker restarted before training finished; start a new training request.')
             JOBS[job['id']] = job
         except (OSError,ValueError,KeyError): continue
-    server = ThreadingHTTPServer(('0.0.0.0',8000),Handler)
+    server = ThreadingHTTPServer(('0.0.0.0',int(os.environ.get('CARETAKER_WORKER_PORT','8000'))),Handler)
     threading.Thread(target=server.serve_forever,daemon=True).start()
     # Load sequentially to avoid multiplying temporary CPU RAM during model startup.
     for role, count, loop in (('training', TRAINING_WORKERS, training_loop), ('inference', INFERENCE_WORKERS, inference_loop)):
